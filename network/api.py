@@ -9,7 +9,8 @@ from aiohttp import web
 from typing import Dict, List, Tuple
 import ecdsa
 
-from blockchain import Block, Transaction
+from blockchain.blockchain import Block
+from blockchain.transaction import Transaction
 from utils import validate_peer_auth, SecurityUtils, BLOCKS_RECEIVED, TXS_BROADCAST
 
 logger = logging.getLogger("NetworkAPI")

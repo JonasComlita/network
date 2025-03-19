@@ -3,8 +3,10 @@ from tkinter import ttk, messagebox, filedialog, simpledialog
 import time
 from queue import Queue
 from typing import Dict, List, Optional
-from blockchain import Blockchain, Block, Transaction, TransactionType
-from network import BlockchainNetwork
+from blockchain.blockchain import Blockchain
+from blockchain.core import Block
+from blockchain.transaction import Transaction, TransactionType
+from network.core import BlockchainNetwork
 from utils import SecurityUtils, generate_wallet, derive_key, Fernet
 import logging
 import asyncio

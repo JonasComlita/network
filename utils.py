@@ -11,7 +11,6 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 import socket
 from dotenv import load_dotenv
-from key_rotation.core import KeyRotationManager
 import logging
 import time
 import random
@@ -34,7 +33,7 @@ load_dotenv()
 BLOCKCHAIN_REGISTRY = CollectorRegistry()
 
 # Global KeyRotationManager instance
-rotation_manager: Optional[KeyRotationManager] = None
+rotation_manager: None
 
 async def init_rotation_manager(node_id: str) -> None:
     """Initialize the KeyRotationManager for the node."""
@@ -79,7 +78,7 @@ def generate_node_keypair() -> Tuple[str, str]:
     public_key = private_key.get_verifying_key()
     return private_key.to_string().hex(), public_key.to_string().hex()
 
-def load_config(config_file: str = "config.yaml") -> Dict[str, Any]:
+def load_config(config_file: str = "config.json") -> Dict[str, Any]:
     """Load and validate configuration from a YAML file."""
     default_config = {
         "difficulty": 4,
@@ -276,13 +275,31 @@ def get_secure_password(provided_password: str = None) -> str:
 import msgpack
 from typing import Any, Dict
 
-def serialize(data: Any) -> bytes:
+def serialize_block(data: Any) -> bytes:
     """Serialize data using msgpack"""
     return msgpack.packb(data, use_bin_type=True)
 
-def deserialize(data: bytes) -> Any:
+def deserialize_block(data: bytes) -> Any:
     """Deserialize msgpack data"""
     return msgpack.unpackb(data, raw=False)
+
+# Move these functions to separate module or use lazy imports
+def serialize_transaction(transaction_dict: Dict) -> bytes:
+    """Serialize a transaction dictionary to bytes using msgpack."""
+    try:
+        return msgpack.packb(transaction_dict, use_bin_type=True)
+    except Exception as e:
+        logger.error(f"Failed to serialize transaction: {e}")
+        raise
+
+def deserialize_transaction_dict(data: bytes) -> Dict:
+    """Deserialize bytes back into a transaction dictionary."""
+    try:
+        transaction_data = msgpack.unpackb(data, raw=False)
+        return transaction_data
+    except Exception as e:
+        logger.error(f"Failed to deserialize transaction: {e}")
+        raise
 
 # Functions to handle binary data for network transmission
 def prepare_for_network(obj: Dict) -> Dict:

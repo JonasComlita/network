@@ -15,7 +15,8 @@ from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from collections import defaultdict
 import ecdsa
 from pathlib import Path
-from utils import serialize_block, deserialize_block, serialize_transaction, deserialize_transaction
+from utils import serialize_block, deserialize_block, serialize_transaction, deserialize_transaction_dict
+from blockchain.transaction import Transaction
 
 from .p2p import (
     PeerReputation, 
@@ -26,7 +27,9 @@ from .p2p import (
 )
 from .api import setup_api_routes
 
-from blockchain import Blockchain, Block, Transaction
+from blockchain.blockchain import Blockchain
+from blockchain.core import Block
+from blockchain.transaction import Transaction
 from utils import (
     PEER_AUTH_SECRET, 
     SSL_CERT_PATH, 

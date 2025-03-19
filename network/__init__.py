@@ -12,14 +12,14 @@ logging.basicConfig(
 )
 
 # Export main components
-from blockchain.core import (
+from network.core import (
     BlockchainNetwork,
     load_config,
     save_config,
     get_default_config
 )
 
-from p2p import (
+from network.p2p import (
     PeerReputation,
     RateLimiter,
     NonceTracker,

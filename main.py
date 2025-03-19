@@ -7,8 +7,11 @@ import sys
 import os
 import time
 import concurrent.futures
-from blockchain import Blockchain, Transaction, TransactionType, Block
-from network import BlockchainNetwork, load_config, save_config, NodeIdentity
+from blockchain.blockchain import Blockchain
+from utils import  TransactionType
+from blockchain.core import Block
+from network.core import BlockchainNetwork, load_config, save_config
+from network.p2p import NodeIdentity
 import getpass
 from utils import init_rotation_manager, find_available_port_async, is_port_available
 from gui import BlockchainGUI
@@ -372,7 +375,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        asyncio.run(main())
     except Exception as e:
         logger.critical(f"Critical error in main program: {e}", exc_info=True)
         sys.exit(1)

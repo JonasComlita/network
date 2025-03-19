@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -17,7 +17,7 @@ from cryptography.fernet import Fernet
 from aiohttp import ClientSession, ClientTimeout
 from security import KeyBackupManager
 from dotenv import load_dotenv
-from blockchain import Blockchain
+from blockchain.blockchain import Blockchain
 
 logger = logging.getLogger(__name__)
 
