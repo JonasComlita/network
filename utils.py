@@ -33,7 +33,7 @@ load_dotenv()
 BLOCKCHAIN_REGISTRY = CollectorRegistry()
 
 # Global KeyRotationManager instance
-rotation_manager: None
+rotation_manager = None
 
 async def init_rotation_manager(node_id: str) -> None:
     """Initialize the KeyRotationManager for the node."""

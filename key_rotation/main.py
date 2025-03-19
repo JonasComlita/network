@@ -10,7 +10,7 @@ from key_rotation.core import KeyRotationManager
 from key_rotation.api import create_rotation_api
 import signal
 from werkzeug.serving import make_server
-from blockchain import Blockchain
+from blockchain.blockchain import Blockchain
 
 logger = logging.getLogger(__name__)
 

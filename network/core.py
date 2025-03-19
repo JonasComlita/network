@@ -275,6 +275,39 @@ class BlockchainNetwork:
             logger.warning(f"Running without HTTPS for {self.node_id} on port {self.port} due to SSL failure")
             self.ssl_context = None
 
+    async def start_server(self):
+        """Start the P2P and API servers"""
+        try:
+            # Start the web API
+            await self.runner.setup()
+            self.site = web.TCPSite(
+                self.runner, 
+                self.host, 
+                self.api_port,
+                ssl_context=self.ssl_context
+            )
+            await self.site.start()
+            logger.info(f"API server started on {self.host}:{self.api_port}")
+            
+            # Start a simple health check server
+            health_app = web.Application()
+            health_app.router.add_get('/health', lambda request: web.Response(text="OK"))
+            health_runner = web.AppRunner(health_app)
+            await health_runner.setup()
+            self.health_site = web.TCPSite(
+                health_runner, 
+                self.host, 
+                self.port,
+                ssl_context=self.ssl_context
+            )
+            await self.health_site.start()
+            logger.info(f"Health check endpoint added on {self.host}:{self.port}/health")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start server: {e}")
+            raise
+
     async def start(self):
         """Start the network with periodic discovery and sync"""
         if self.loop is None:
@@ -346,53 +379,53 @@ class BlockchainNetwork:
         logger.info("Network stopped")
 
     # Modified core.py for network communication
-async def send_with_retry(self, url: str, data: dict, method: str = "post", max_retries: Optional[int] = None) -> Tuple[bool, Optional[dict]]:
-    """Send request with per-node auth and msgpack serialization"""
-    if max_retries is None:
-        max_retries = self.config["max_retries"]
-    
-    # Sign the request with our private key
-    sk = ecdsa.SigningKey.from_string(bytes.fromhex(self.private_key), curve=ecdsa.SECP256k1)
-    
-    # Serialize using msgpack instead of JSON
-    from utils import serialize, deserialize
-    serialized_data = serialize(data)
-    message = serialized_data
-    signature = sk.sign(message).hex()
-    
-    headers = {
-        "Node-ID": self.node_id, 
-        "Signature": signature,
-        "Content-Type": "application/msgpack"
-    }
-    
-    async with aiohttp.ClientSession() as session:
-        for attempt in range(max_retries):
-            try:
-                if method == "post":
-                    async with session.post(url, data=serialized_data, headers=headers, ssl=self.client_ssl_context) as resp:
-                        if resp.status == 200:
-                            if resp.content_type == "application/msgpack":
-                                resp_data = await resp.read()
-                                return True, deserialize(resp_data)
-                            else:
-                                return True, await resp.json() if resp.content_type == "application/json" else None
+    async def send_with_retry(self, url: str, data: dict, method: str = "post", max_retries: Optional[int] = None) -> Tuple[bool, Optional[dict]]:
+        """Send request with per-node auth and msgpack serialization"""
+        if max_retries is None:
+            max_retries = self.config["max_retries"]
+        
+        # Sign the request with our private key
+        sk = ecdsa.SigningKey.from_string(bytes.fromhex(self.private_key), curve=ecdsa.SECP256k1)
+        
+        # Serialize using msgpack instead of JSON
+        from utils import serialize, deserialize
+        serialized_data = serialize(data)
+        message = serialized_data
+        signature = sk.sign(message).hex()
+        
+        headers = {
+            "Node-ID": self.node_id, 
+            "Signature": signature,
+            "Content-Type": "application/msgpack"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            for attempt in range(max_retries):
+                try:
+                    if method == "post":
+                        async with session.post(url, data=serialized_data, headers=headers, ssl=self.client_ssl_context) as resp:
+                            if resp.status == 200:
+                                if resp.content_type == "application/msgpack":
+                                    resp_data = await resp.read()
+                                    return True, deserialize(resp_data)
+                                else:
+                                    return True, await resp.json() if resp.content_type == "application/json" else None
+                            return False, None
+                    elif method == "get":
+                        async with session.get(url, headers=headers, ssl=self.client_ssl_context) as resp:
+                            if resp.status == 200:
+                                if resp.content_type == "application/msgpack":
+                                    resp_data = await resp.read()
+                                    return True, deserialize(resp_data)
+                                else:
+                                    return True, await resp.json() if resp.content_type == "application/json" else None
+                            return False, None
+                except Exception as e:
+                    logger.warning(f"Request to {url} failed (attempt {attempt + 1}): {e}")
+                    if attempt == max_retries - 1:
                         return False, None
-                elif method == "get":
-                    async with session.get(url, headers=headers, ssl=self.client_ssl_context) as resp:
-                        if resp.status == 200:
-                            if resp.content_type == "application/msgpack":
-                                resp_data = await resp.read()
-                                return True, deserialize(resp_data)
-                            else:
-                                return True, await resp.json() if resp.content_type == "application/json" else None
-                        return False, None
-            except Exception as e:
-                logger.warning(f"Request to {url} failed (attempt {attempt + 1}): {e}")
-                if attempt == max_retries - 1:
-                    return False, None
-                await asyncio.sleep(0.5 * (2 ** attempt))  # Exponential backoff
-            return False, None
+                    await asyncio.sleep(0.5 * (2 ** attempt))  # Exponential backoff
+                return False, None
     
     async def process_message_queue(self):
         """Process queued broadcast messages"""
@@ -756,3 +789,72 @@ async def send_with_retry(self, url: str, data: dict, method: str = "post", max_
                     logger.info(f"Connection closed from {client_ip}")
                 except Exception as e:
                     logger.error(f"Error closing connection from {client_ip}: {e}")
+
+    async def sync(self, local_height: int, local_hash: Optional[str] = None) -> bool:
+        """Synchronize with peers to get latest blocks"""
+        logger.info(f"Starting blockchain sync from height {local_height}")
+        if not self.peers:
+            logger.warning("No peers to sync with")
+            return False
+            
+        try:
+            # Request blocks from the most reliable peer(s)
+            success = False
+            best_peers = sorted(
+                self.peers.items(), 
+                key=lambda p: self.peer_reputation.get_score(p[0]), 
+                reverse=True
+            )[:3]
+            
+            for peer_id, peer_data in best_peers:
+                url = f"https://{peer_data['host']}:{peer_data['port']}/get_blocks?start={local_height+1}"
+                success, blocks_data = await self.send_with_retry(url, {}, method="get")
+                
+                if success and blocks_data:
+                    blocks_added = 0
+                    # Process blocks in order
+                    for block_data in blocks_data:
+                        block = Block.from_dict(block_data)
+                        if await self.blockchain.add_block(block):
+                            blocks_added += 1
+                        else:
+                            # Stop if we encounter an invalid block
+                            break
+                    
+                    if blocks_added > 0:
+                        logger.info(f"Added {blocks_added} blocks from peer {peer_id}")
+                        success = True
+                        self.peer_reputation.update_score(peer_id, 5)  # Reward successful sync
+                        break
+                else:
+                    self.peer_reputation.update_score(peer_id, -1)  # Penalize failed sync attempt
+            
+            return success
+        except Exception as e:
+            logger.error(f"Error during blockchain sync: {e}")
+            return False
+
+    async def send_heartbeat(self):
+        """Send heartbeat to connected peers to maintain connections"""
+        if not self.peers:
+            return
+            
+        current_time = time.time()
+        tasks = []
+        
+        with self.lock:
+            for peer_id, peer_data in self.peers.items():
+                # Only send heartbeat if we haven't communicated recently
+                if current_time - peer_data.get("last_seen", 0) > self.heartbeat_interval / 2:
+                    url = f"https://{peer_data['host']}:{peer_data['port']}/heartbeat"
+                    data = {"node_id": self.node_id, "timestamp": current_time}
+                    tasks.append(self.send_with_retry(url, data))
+        
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, (peer_id, _) in enumerate(list(self.peers.items())[:len(results)]):
+                result = results[i]
+                if isinstance(result, Exception) or not result[0]:
+                    self._increment_failure(peer_id)
+                else:
+                    self.peers[peer_id]["last_seen"] = current_time

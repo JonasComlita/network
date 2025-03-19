@@ -223,11 +223,11 @@ async def async_main(args, loop):
 
     # Initialize security components
     security_monitor, mfa_manager, backup_manager = await initialize_security(node_id)
+    await init_rotation_manager(node_id)
     from utils import rotation_manager
-    if not rotation_manager:
-        await init_rotation_manager(node_id)
 
     # Start network with retry
+    network = None
     for attempt in range(3):
         try:
             network = BlockchainNetwork(
@@ -244,6 +244,9 @@ async def async_main(args, loop):
             if attempt == 2:
                 raise
             await asyncio.sleep(2)
+
+    if network is None:
+        raise RuntimeError("Failed to start network after 3 attempts")
 
     # Adjust key rotation port if needed
     key_rotation_port = config["key_rotation_port"]
@@ -281,19 +284,23 @@ def run_async_loop(loop):
 async def async_shutdown(network: BlockchainNetwork, blockchain: Blockchain, shutdown_event: asyncio.Event, loop: asyncio.AbstractEventLoop):
     """Cleanly shut down all components"""
     logger.info("Initiating shutdown...")
-    shutdown_event.set()
-    await blockchain.save_chain()
-    await blockchain.save_wallets()
-    await network.stop()
-    await blockchain.shutdown()
+    if shutdown_event:
+        shutdown_event.set()
+    if blockchain:
+        await blockchain.save_chain()
+        await blockchain.save_wallets()
+    if network:
+        await network.stop()
+    if blockchain:
+        await blockchain.shutdown()
     tasks = [t for t in asyncio.all_tasks(loop) if not t.done()]
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
     loop.stop()
 
-def main():
-    set_resource_limits()
+async def async_main_wrapper():
+    """Async wrapper for the main function"""
     parser = argparse.ArgumentParser(description="Run a blockchain node.")
     parser.add_argument("--config", type=str, default="network_config.json", help="Path to configuration file")
     parser.add_argument("--p2p-port", type=int, default=None, help="P2P communication port")
@@ -317,65 +324,72 @@ def main():
         logger.error(f"Data directory {args.data_dir} is not accessible")
         sys.exit(1)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    set_resource_limits()
+    
+    # Create event loop for main thread
+    loop = asyncio.get_running_loop()
+    
+    # Create thread for async operations
     async_thread = threading.Thread(target=run_async_loop, args=(loop,), daemon=True)
     async_thread.start()
 
-    # Async initialization
+    # Default values in case of early exit
+    blockchain = None
+    network = None
+    shutdown_event = asyncio.Event()
+    
     try:
-        blockchain, network, security_monitor, mfa_manager, backup_manager, rotation_manager, shutdown_event = loop.run_until_complete(
-            async_main(args, loop)
-        )
-    except Exception as e:
-        logger.error(f"Initialization failed: {e}", exc_info=True)
-        loop.run_until_complete(async_shutdown(network, blockchain, shutdown_event, loop))
-        async_thread.join(timeout=5)
-        sys.exit(1)
+        # Async initialization
+        blockchain, network, security_monitor, mfa_manager, backup_manager, rotation_manager, shutdown_event = await async_main(args, loop)
+        
+        # Setup GUI with event subscription
+        gui = BlockchainGUI(blockchain, network, mfa_manager=mfa_manager, backup_manager=backup_manager)
+        gui.loop = loop
+        gui.loop_thread = async_thread
 
-    # Setup GUI with event subscription
-    gui = BlockchainGUI(blockchain, network, mfa_manager=mfa_manager, backup_manager=backup_manager)
-    gui.loop = loop
-    gui.loop_thread = async_thread
+        def on_new_block(block):
+            gui.update_chain_display()
+        def on_error(error):
+            gui.show_error(str(error))
+            
+        blockchain.subscribe("new_block", on_new_block)
+        blockchain.subscribe("error", on_error)
 
-    def on_new_block(block):
-        gui.update_chain_display()
-    def on_error(error):
-        gui.show_error(str(error))
-    blockchain.subscribe("new_block", on_new_block)
-    blockchain.subscribe("error", on_error)
+        # Signal handlers
+        def signal_handler(sig, frame):
+            logger.info(f"Received signal {sig}, shutting down...")
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(async_shutdown(network, blockchain, shutdown_event, loop)))
+            
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
 
-    # Signal handlers
-    def signal_handler(sig, frame):
-        logger.info(f"Received signal {sig}, shutting down...")
-        loop.call_soon_threadsafe(lambda: asyncio.create_task(async_shutdown(network, blockchain, shutdown_event, loop)))
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+        # Run GUI in a separate thread
+        gui_thread = threading.Thread(target=gui.run, daemon=True)
+        gui_thread.start()
 
-    # Run GUI in a separate thread
-    gui_thread = threading.Thread(target=gui.run, daemon=True)
-    gui_thread.start()
-
-    try:
+        # Wait for GUI and async thread to complete
         while gui_thread.is_alive() and async_thread.is_alive():
-            time.sleep(1)
+            await asyncio.sleep(1)
             if not async_thread.is_alive():
                 logger.error("Async thread crashed unexpectedly")
                 raise RuntimeError("Async loop terminated")
+                
     except Exception as e:
         logger.error(f"Application failed: {e}", exc_info=True)
+        await async_shutdown(network, blockchain, shutdown_event, loop)
+        return 1
+        
     finally:
-        loop.run_until_complete(async_shutdown(network, blockchain, shutdown_event, loop))
-        gui_thread.join(timeout=5)
-        async_thread.join(timeout=5)
-        if gui_thread.is_alive() or async_thread.is_alive():
-            logger.warning("Threads did not terminate cleanly")
+        # Final cleanup
+        await async_shutdown(network, blockchain, shutdown_event, loop)
         logger.info("Application fully shut down")
-        sys.exit(0)
+    
+    return 0
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        # Use asyncio.run for the new async main wrapper
+        sys.exit(asyncio.run(async_main_wrapper()))
     except Exception as e:
         logger.critical(f"Critical error in main program: {e}", exc_info=True)
         sys.exit(1)
