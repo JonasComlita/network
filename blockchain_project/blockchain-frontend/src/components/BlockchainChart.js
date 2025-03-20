@@ -1,17 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
-import { Line } from 'react-chartjs-2';
+import { Chart, registerables } from 'chart.js';
+import { Bar } from 'react-chartjs-2';
 import TransactionList from './TransactionList';
+
+// Register all components
+Chart.register(...registerables);
 
 const BlockchainChart = () => {
     const [blocks, setBlocks] = useState([]);
     const [selectedBlockId, setSelectedBlockId] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const chartRef = useRef(null);
+    const chartInstanceRef = useRef(null);
+
+    const token = localStorage.getItem('token'); // Example of retrieving token from local storage
 
     useEffect(() => {
         const fetchBlocks = async () => {
-            const response = await axios.get('http://localhost:8000/api/blocks/');
-            setBlocks(response.data);
+            try {
+                const response = await axios.get('http://localhost:8000/api/blocks/', {
+                    headers: {
+                        Authorization: `Bearer ${token}`, // Use the retrieved token
+                    },
+                });
+                setBlocks(response.data);
+            } catch (error) {
+                console.error('Error fetching blocks:', error);
+            }
         };
         fetchBlocks();
 
@@ -26,23 +42,27 @@ const BlockchainChart = () => {
         return () => {
             socket.close();
         };
-    }, []);
+    }, [token]);
+
+    useEffect(() => {
+        if (chartRef.current) {
+            const ctx = chartRef.current.getContext('2d');
+            // Create your chart here
+        }
+    }, [blocks]); // Ensure this runs when data changes
 
     const filteredBlocks = blocks.filter(block => 
         block.index.toString().includes(searchTerm) || 
         new Date(block.timestamp).toLocaleString().includes(searchTerm)
     );
 
-    const chartData = {
-        labels: filteredBlocks.map(block => new Date(block.timestamp).toLocaleString()),
-        datasets: [
-            {
-                label: 'Block Index',
-                data: filteredBlocks.map(block => block.index),
-                borderColor: 'rgba(75,192,192,1)',
-                fill: false,
-            },
-        ],
+    const fetchData = async () => {
+        try {
+            const response = await axios.get('http://localhost:8000/api/data/');
+            // Handle response
+        } catch (error) {
+            console.error('Error fetching data:', error.response ? error.response.data : error.message);
+        }
     };
 
     return (
@@ -55,7 +75,11 @@ const BlockchainChart = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="border p-2 mb-4"
             />
-            <Line data={chartData} />
+            {filteredBlocks && filteredBlocks.length > 0 ? (
+                <canvas ref={chartRef} />
+            ) : (
+                <p>Loading...</p>
+            )}
             <h3 className="mt-4">Blocks</h3>
             <ul>
                 {filteredBlocks.map(block => (

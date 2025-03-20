@@ -1,8 +1,8 @@
 from django.shortcuts import render
 from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Block, Transaction, CustomUser, Notification
-from .serializers import BlockSerializer, TransactionSerializer, UserSerializer, NotificationSerializer
+from .models import Block, Transaction, CustomUser, Notification, HistoricalData
+from .serializers import BlockSerializer, TransactionSerializer, UserSerializer, NotificationSerializer, HistoricalDataSerializer
 from django.contrib.auth.models import User
 from rest_framework import permissions
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -19,6 +19,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count
 from django.utils import timezone
 from datetime import timedelta
+from django.db import connection
 
 # Create your views here.
 
@@ -63,10 +64,16 @@ class RegisterView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         user = serializer.save()
-        # Set default roles or allow setting roles from the request
         user.is_admin = self.request.data.get('is_admin', False)
         user.is_miner = self.request.data.get('is_miner', False)
         user.save()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            self.perform_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  # Return validation errors
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     # You can customize the token response here if needed
@@ -181,6 +188,23 @@ class UserDashboardView(generics.GenericAPIView):
             'total_amount': total_amount,
             'transactions': TransactionSerializer(transactions, many=True).data,
         })
+    
+class HistoricalDataView(generics.ListAPIView):
+    serializer_class = HistoricalDataSerializer
+
+    def get_queryset(self):
+        queryset = HistoricalData.objects.all()
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        min_price = self.request.query_params.get('min_price')
+        max_price = self.request.query_params.get('max_price')
+
+        if start_date and end_date:
+            queryset = queryset.filter(timestamp__range=[start_date, end_date])
+        if min_price and max_price:
+            queryset = queryset.filter(price__range=[min_price, max_price])
+
+        return queryset
 
 class HistoricalTransactionDataView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -223,3 +247,9 @@ class SentimentDataView(generics.GenericAPIView):
         if data:
             return Response(data, status=status.HTTP_200_OK)
         return Response({"error": "Failed to fetch data"}, status=status.HTTP_400_BAD_REQUEST)
+
+def fetch_blockchain_data(request):
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM blocks;")
+        blocks = cursor.fetchall()
+    return render(request, 'blocks.html', {'blocks': blocks})

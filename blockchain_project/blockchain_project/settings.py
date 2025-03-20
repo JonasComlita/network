@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'blockchain',
     'channels',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -51,6 +52,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
 ]
 
 ROOT_URLCONF = "blockchain_project.urls"
@@ -78,11 +81,15 @@ WSGI_APPLICATION = "blockchain_project.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
+       'default': {
+           'ENGINE': 'django.db.backends.postgresql',
+           'NAME': 'blockchain',  # Name of your blockchain database
+           'USER': 'postgres',   # Your PostgreSQL username
+           'PASSWORD': '+Pw=fku123!',  # Your PostgreSQL password
+           'HOST': 'localhost',  # or the IP address of your PostgreSQL server
+           'PORT': '5432',  # Default PostgreSQL port
+       }
+   }
 
 
 # Password validation
@@ -135,3 +142,10 @@ REST_FRAMEWORK = {
 }
 
 ASGI_APPLICATION = 'blockchain_project.asgi.application'
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # Allow your React app
+]
+
+# Alternatively, to allow all origins (not recommended for production)
+# CORS_ALLOW_ALL_ORIGINS = True

@@ -1,13 +1,17 @@
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.db import models
+from django.contrib.auth.models import User
+import requests
+from django.utils import timezone
 
 # Create your models here.
 
 class Transaction(models.Model):
-    sender = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    block = models.ForeignKey('Block', on_delete=models.CASCADE)
     recipient = models.CharField(max_length=255)
-    amount = models.FloatField()
-    block = models.ForeignKey('Block', related_name='transactions', on_delete=models.CASCADE)
+    sender = models.CharField(max_length=255)
+    created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return f"Transaction from {self.sender} to {self.recipient} of {self.amount}"
@@ -57,3 +61,22 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification for {self.user.username}: {self.message}"
+
+class PriceChangeNotification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    price_change = models.FloatField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Notification for {self.user.username}: {self.price_change}"
+
+class HistoricalData(models.Model):
+    # Define your fields here
+    timestamp = models.DateTimeField(auto_now_add=True)
+    price = models.FloatField()
+    volume = models.FloatField()
+    # Add any other fields you need
+
+    def __str__(self):
+        return f"Data at {self.timestamp}: Price {self.price}, Volume {self.volume}"

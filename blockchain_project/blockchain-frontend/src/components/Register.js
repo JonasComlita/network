@@ -3,6 +3,7 @@ import axios from 'axios';
 
 const Register = () => {
     const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
     const [isMiner, setIsMiner] = useState(false);
@@ -10,10 +11,11 @@ const Register = () => {
     const handleRegister = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('http://localhost:8000/api/register/', { username, password, is_admin: isAdmin, is_miner: isMiner });
+            const response = await axios.post('http://localhost:8000/api/register/', { username, email, password, is_admin: isAdmin, is_miner: isMiner });
             alert('Registration successful!');
         } catch (error) {
-            alert('Registration failed!');
+            const errorMessage = error.response ? error.response.data.detail || error.message : 'An error occurred';
+            alert('Registration failed: ' + errorMessage);
         }
     };
 
@@ -24,6 +26,13 @@ const Register = () => {
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                required
+            />
+            <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
             />
             <input
