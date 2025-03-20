@@ -3,6 +3,8 @@ from django.db import models
 from django.contrib.auth.models import User
 import requests
 from django.utils import timezone
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 # Create your models here.
 
@@ -80,3 +82,27 @@ class HistoricalData(models.Model):
 
     def __str__(self):
         return f"Data at {self.timestamp}: Price {self.price}, Volume {self.volume}"
+    
+class HistoricalTransactionData(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
+    amount = models.FloatField()
+    # Add any other fields you need
+
+    def __str__(self):
+        return f"Data at {self.timestamp}: Amount {self.amount}"
+    
+class NewsData(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    # Add any other fields you need
+
+    def __str__(self):
+        return f"Data at {self.timestamp}: Title {self.title}"
+    
+class UserAnalytics(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    total_transactions = models.IntegerField()
+    total_amount = models.FloatField()
+    # Add any other fields you need
+

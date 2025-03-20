@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Block, Transaction, CustomUser, Notification, HistoricalData
+from .models import Block, Transaction, CustomUser, Notification, HistoricalData, HistoricalTransactionData, NewsData, UserAnalytics
 from django.contrib.auth.models import User
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -31,7 +31,22 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = '__all__'
 
+class HistoricalTransactionDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HistoricalTransactionData
+        fields = '__all__'
+
 class HistoricalDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = HistoricalData
+        fields = '__all__'
+
+class NewsDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NewsData
+        fields = '__all__'
+
+class UserAnalyticsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserAnalytics
         fields = '__all__'
