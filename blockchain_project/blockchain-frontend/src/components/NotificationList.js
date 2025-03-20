@@ -16,8 +16,14 @@ const NotificationList = () => {
             
             try {
                 const response = await apiService.getNotifications();
-                setNotifications(response.data);
-                setNotificationCount(response.data.filter(n => !n.is_read).length);
+                // Handle both array and paginated object responses
+                const notificationData = Array.isArray(response.data) 
+                    ? response.data 
+                    : (response.data.results || []);
+                
+                setNotifications(notificationData);
+                // Safely count unread notifications
+                setNotificationCount(notificationData.filter(n => !n.is_read).length);
             } catch (error) {
                 console.error('Failed to fetch notifications:', error);
                 setError('Unable to load notifications. Please try again later.');

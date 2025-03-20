@@ -5,6 +5,7 @@ websocket_urlpatterns = [
     re_path(r'ws/blocks/$', consumers.BlockConsumer.as_asgi()),
     re_path(r'ws/notifications/$', consumers.NotificationConsumer.as_asgi()),
     re_path(r'ws/analytics/$', consumers.AdvancedAnalyticsConsumer.as_asgi()),
+    re_path(r'ws/advanced_analytics/$', consumers.AdvancedAnalyticsConsumer.as_asgi()),
     re_path(r'ws/transaction_analytics/$', consumers.TransactionAnalyticsConsumer.as_asgi()),
     re_path(r'ws/user_profile/$', consumers.UserProfileConsumer.as_asgi()),
     re_path(r'ws/user_preferences/$', consumers.UserPreferencesConsumer.as_asgi()),
@@ -18,4 +19,6 @@ websocket_urlpatterns = [
     re_path(r'ws/blockchain_chart/$', consumers.BlockchainChartConsumer.as_asgi()),
     re_path(r'ws/transaction/$', consumers.TransactionConsumer.as_asgi()),
     re_path(r'ws/news_data/$', consumers.NewsDataConsumer.as_asgi()),
+    re_path(r'ws/sentiment_data/$', consumers.SentimentDataConsumer.as_asgi()),
+    re_path(r'ws/test/$', consumers.TestConsumer.as_asgi()),
 ]

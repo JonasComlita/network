@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Chart, registerables } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
 import TransactionList from './TransactionList';
 
 // Register all components
@@ -18,21 +17,35 @@ const BlockchainChart = () => {
 
     const token = localStorage.getItem('token');
 
-    // Separate API fetch function for reusability
-    const fetchBlocks = async () => {
+    // Wrap fetchBlocks in useCallback to prevent recreation on every render
+    const fetchBlocks = useCallback(async () => {
         try {
             const response = await axios.get('http://localhost:8000/api/blocks/', {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
             });
-            setBlocks(response.data);
+            
+            // Make sure we're setting an array
+            if (response.data && Array.isArray(response.data)) {
+                setBlocks(response.data);
+            } else if (response.data && !Array.isArray(response.data)) {
+                // If it's not an array but exists, it might be an object with results
+                console.log('API response is not an array:', response.data);
+                // Try to extract array if it's in a results property
+                const resultsArray = response.data.results || [];
+                setBlocks(resultsArray);
+            } else {
+                // Fallback to empty array
+                setBlocks([]);
+            }
         } catch (error) {
             console.error('Error fetching blocks:', error);
+            setBlocks([]); // Set to empty array on error
         }
-    };
+    }, [token]); // Add token as the only dependency
 
-    // Fetch blocks effect (separate from WebSocket)
+    // Fetch blocks effect
     useEffect(() => {
         fetchBlocks();
         // Set up an interval to fetch blocks regularly as a fallback mechanism
@@ -41,7 +54,7 @@ const BlockchainChart = () => {
         return () => {
             clearInterval(intervalId);
         };
-    }, [token]);
+    }, [fetchBlocks]); // Use fetchBlocks as dependency
 
     // WebSocket connection setup with progressive backoff
     useEffect(() => {
@@ -156,11 +169,11 @@ const BlockchainChart = () => {
                 socketRef.current.close();
             }
         };
-    }, []);
+    }, [fetchBlocks]); // Add fetchBlocks as dependency
 
     // Chart creation effect
     useEffect(() => {
-        if (chartRef.current && blocks.length > 0) {
+        if (chartRef.current && Array.isArray(blocks) && blocks.length > 0)  {
             const ctx = chartRef.current.getContext('2d');
             
             // Clean up previous chart instance to prevent memory leaks
@@ -209,10 +222,10 @@ const BlockchainChart = () => {
         }
     }, [blocks]); // Depend on blocks data
 
-    const filteredBlocks = blocks.filter(block => 
+    const filteredBlocks = Array.isArray(blocks) ? blocks.filter(block => 
         block.index.toString().includes(searchTerm) || 
         new Date(block.timestamp).toLocaleString().includes(searchTerm)
-    );
+    ) : [];
 
     return (
         <div className="p-4">

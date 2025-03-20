@@ -165,14 +165,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Allow your React app
 ]
 
-# Alternatively, to allow all origins (not recommended for production)
-# CORS_ALLOW_ALL_ORIGINS = True
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("localhost", 6379)],  # Ensure Redis is running locally
-        },
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }

@@ -4,7 +4,9 @@ import SentimentData from './SentimentData';
 import PriceData from './PriceData';
 import TransactionAnalytics from './TransactionAnalytics';
 import NotificationList from './NotificationList';
-
+import TokenDebug from './TokenDebug';
+import apiService from './apiService';
+import WebSocketTest from './WebSocketTest';
 const Dashboard = () => {
     const [connectionStatus, setConnectionStatus] = useState({
         api: 'checking',
@@ -107,6 +109,10 @@ const Dashboard = () => {
                     </div>
                 )}
             </header>
+
+            <div className="mb-6">
+                <WebSocketTest />
+            </div>
 
             {/* Top row - Price and Notifications */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

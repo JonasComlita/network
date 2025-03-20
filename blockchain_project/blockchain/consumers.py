@@ -287,4 +287,14 @@ class BlockchainChartConsumer(AsyncWebsocketConsumer):
     async def send_blockchain_chart_update(self, event):
         await self.send(text_data=json.dumps(event))
 
+class TestConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        print("TestConsumer: Connection attempt")
+        await self.accept()
+        print("TestConsumer: Connection accepted")
+        await self.send(text_data=json.dumps({
+            'message': 'Connected to test consumer'
+        }))
 
+    async def disconnect(self, close_code):
+        print(f"TestConsumer: Disconnected with code {close_code}")

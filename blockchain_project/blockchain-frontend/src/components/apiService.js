@@ -94,6 +94,29 @@ const apiService = {
   // Notifications endpoints
   getNotifications: () => fetchWithRetry(() => api.get('/notifications/')),
   markNotificationAsRead: (id) => fetchWithRetry(() => api.patch(`/notifications/${id}/`, { is_read: true })),
+
+  healthCheck: () => fetchWithRetry(() => api.get('/health-check/')),
+
+  // Advanced analytics endpoint
+  getAdvancedAnalytics: () => fetchWithRetry(() => api.get('/advanced_analytics/')),
+
+  // Transaction analytics endpoint
+  getTransactionAnalytics: () => fetchWithRetry(() => api.get('/transaction_analytics/')),
+  
+  // User profile endpoint
+  getUserProfile: () => fetchWithRetry(() => api.get('/user_profile/')),
+
+  // User preferences endpoint
+  getUserPreferences: () => fetchWithRetry(() => api.get('/user_preferences/')),
+  
+  // Blockchain chart endpoint
+  getBlockchainChart: () => fetchWithRetry(() => api.get('/blockchain_chart/')),
+
+  // Transaction list endpoint
+  getTransactionList: () => fetchWithRetry(() => api.get('/transaction_list/')),
+
+  // News data endpoint 
+  getNewsData: () => fetchWithRetry(() => api.get('/news_data/')),
   
   // WebSocket helper
   createWebSocketConnection: (endpoint) => {
@@ -101,6 +124,7 @@ const apiService = {
     const host = window.location.hostname;
     const port = "8000"; // Backend port
     const timestamp = new Date().getTime();
+    const token = localStorage.getItem('token');
     
     // Ensure endpoints match the routes defined in routing.py
     let wsEndpoint = endpoint;
@@ -112,7 +136,8 @@ const apiService = {
       wsEndpoint = 'notifications'; // Already correct
     }
     
-    return new WebSocket(`${protocol}//${host}:${port}/ws/${wsEndpoint}/?t=${timestamp}`);
+    // Add token to WebSocket connection for authentication
+    return new WebSocket(`${protocol}//${host}:${port}/ws/${wsEndpoint}/?token=${token}&t=${timestamp}`);
   }
 };
 

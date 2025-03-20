@@ -7,8 +7,15 @@ const PriceData = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(null);
+    const [wsStatus, setWsStatus] = useState('disconnected');
     const socketRef = useRef(null);
     const retryTimeoutRef = useRef(null);
+    const priceRef = useRef(null); // Add a ref to track the latest price value
+
+    // Update the ref whenever price changes
+    useEffect(() => {
+        priceRef.current = price;
+    }, [price]);
 
     useEffect(() => {
         // Initial price fetch
@@ -19,8 +26,8 @@ const PriceData = () => {
             try {
                 const response = await apiService.getPriceData();
                 // Save previous price to show price movement
-                if (price !== null) {
-                    setPreviousPrice(price);
+                if (priceRef.current !== null) {
+                    setPreviousPrice(priceRef.current);
                 }
                 setPrice(response.data.bitcoin.usd);
                 setLastUpdated(new Date());
@@ -40,23 +47,76 @@ const PriceData = () => {
         // Try to set up WebSocket for real-time updates
         const connectWebSocket = () => {
             try {
-              // Close existing connection if any
-              if (socketRef.current && socketRef.current.readyState !== WebSocket.CLOSED) {
-                socketRef.current.close();
-              }
-              
-              // Create new WebSocket connection
-              socketRef.current = apiService.createWebSocketConnection('price');
-              
-              socketRef.current.onopen = () => {
-                console.log('Price WebSocket connection established');
-              };
-              
-              // Rest of the code remains the same...
+                // Close existing connection if any
+                if (socketRef.current && socketRef.current.readyState !== WebSocket.CLOSED) {
+                    socketRef.current.close();
+                }
+                
+                // Get the JWT token from localStorage
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    console.warn('No authentication token available for WebSocket');
+                    setWsStatus('auth_error');
+                    return;
+                }
+                
+                // Create new WebSocket connection with the token
+                const wsUrl = `ws://localhost:8000/ws/price/?token=${token}&t=${new Date().getTime()}`;
+                console.log(`Attempting to connect to WebSocket: ${wsUrl}`);
+                
+                setWsStatus('connecting');
+                socketRef.current = new WebSocket(wsUrl);
+                
+                socketRef.current.onopen = () => {
+                    console.log('Price WebSocket connection established');
+                    setWsStatus('connected');
+                };
+                
+                socketRef.current.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('Price WebSocket message received:', data);
+                        
+                        // If it's just a connection confirmation, don't update the price
+                        if (data.type === 'connection_established') {
+                            console.log('WebSocket connection confirmed');
+                            return;
+                        }
+                        
+                        if (data && data.bitcoin && data.bitcoin.usd) {
+                            setPreviousPrice(priceRef.current); // Use the ref
+                            setPrice(data.bitcoin.usd);
+                            setLastUpdated(new Date());
+                        }
+                    } catch (error) {
+                        console.error('Error processing price WebSocket message:', error);
+                    }
+                };
+                
+                socketRef.current.onerror = (error) => {
+                    console.error('Price WebSocket error:', error);
+                    setWsStatus('error');
+                };
+                
+                socketRef.current.onclose = (event) => {
+                    console.log(`Price WebSocket connection closed: Code ${event.code}, Reason: ${event.reason || 'No reason provided'}`);
+                    setWsStatus('disconnected');
+                    
+                    // Try to reconnect after a delay
+                    if (retryTimeoutRef.current) {
+                        clearTimeout(retryTimeoutRef.current);
+                    }
+                    
+                    retryTimeoutRef.current = setTimeout(() => {
+                        console.log('Attempting to reconnect price WebSocket...');
+                        connectWebSocket();
+                    }, 5000); // Retry after 5 seconds
+                };
             } catch (error) {
-              console.error('Error creating price WebSocket:', error);
+                console.error('Error creating price WebSocket:', error);
+                setWsStatus('error');
             }
-          };
+        };
         
         // Connect to WebSocket
         connectWebSocket();
@@ -73,7 +133,7 @@ const PriceData = () => {
                 socketRef.current.close();
             }
         };
-    }, []);
+    }, []); // Empty dependency array to run only once
 
     // Format price with thousands separator
     const formatPrice = (price) => {
@@ -144,7 +204,16 @@ const PriceData = () => {
                     </span>
                 )}
             </div>
-            <div className="text-right mt-2">
+            <div className="flex justify-between mt-2">
+                <span className={`text-xs px-2 py-1 rounded ${
+                    wsStatus === 'connected' 
+                        ? 'bg-green-100 text-green-800' 
+                        : wsStatus === 'connecting' 
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                }`}>
+                    {wsStatus === 'connected' ? 'Live' : wsStatus === 'connecting' ? 'Connecting...' : 'Polling'}
+                </span>
                 <span className="text-xs text-gray-500">
                     {loading ? 'Updating...' : `Last updated: ${lastUpdated?.toLocaleTimeString() || 'Unknown'}`}
                 </span>
