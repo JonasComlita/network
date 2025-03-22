@@ -14,7 +14,7 @@ from network.core import BlockchainNetwork, load_config, save_config
 from network.p2p import NodeIdentity
 import getpass
 from utils import init_rotation_manager, find_available_port_async, is_port_available
-from gui import BlockchainGUI
+from web_gui import WebGUI
 import threading
 from threading import Lock, Event
 from security import SecurityMonitor, MFAManager, KeyBackupManager
@@ -56,25 +56,35 @@ def create_ssl_context():
     ssl_context.verify_mode = ssl.CERT_REQUIRED
     return ssl_context
 
-async def health_check(host: str, port: int, client_ssl_context, retries: int = 5, delay: float = 1.0) -> bool:
-    """Check if the node is healthy and responding"""
-    health_port = port  # Adjusted to use network's HTTP port directly
-    try:
-        timeout = aiohttp.ClientTimeout(total=5)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            for attempt in range(retries):
-                try:
-                    async with session.get(f"https://{host}:{health_port}/health", ssl=client_ssl_context) as resp:
+async def health_check(host: str, port: int, client_ssl_context=None, retries: int = 5, delay: float = 1.0) -> bool:
+    """Check if the node is healthy with robust connection handling"""
+    logger.info(f"Starting health check for {host}:{port}")
+    
+    # Try both HTTP and HTTPS
+    urls = [
+        f"http://{host}:{port}/health",  # Try without SSL first
+        f"https://{host}:{port}/health"  # Then with SSL
+    ]
+    
+    for attempt in range(retries):
+        for url in urls:
+            try:
+                logger.debug(f"Health check attempt {attempt+1}/{retries} to {url}")
+                async with aiohttp.ClientSession() as session:
+                    # Skip SSL verification completely for health checks
+                    async with session.get(url, ssl=False, timeout=5) as resp:
                         if resp.status == 200:
+                            logger.info(f"Health check successful to {url}")
                             return True
-                except Exception as e:
-                    logger.warning(f"Health check attempt {attempt + 1}/{retries} failed: {e}")
-                if attempt < retries - 1:
-                    await asyncio.sleep(delay)
-            return False
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return False
+            except Exception as e:
+                logger.warning(f"Health check attempt {attempt+1}/{retries} to {url} failed: {e}")
+        
+        # If we've tried all URLs and none worked, wait before trying again
+        if attempt < retries - 1:
+            await asyncio.sleep(delay)
+    
+    logger.error(f"Health check failed after {retries} attempts to {host}:{port}")
+    return False
 
 async def run_async_tasks(blockchain: Blockchain, network: BlockchainNetwork, rotation_manager, loop: asyncio.AbstractEventLoop):
     """Run initial async tasks with health check"""
@@ -143,7 +153,7 @@ async def initialize_security(node_id: str) -> tuple:
     return security_monitor, mfa_manager, backup_manager
 
 async def get_wallet_password(blockchain: Blockchain) -> str:
-    """Asynchronously get or set wallet password"""
+    """Asynchronously get or set wallet password with proper assignment"""
     print("\n=== Wallet Connection ===")
     choice = input("Do you want to connect to an existing wallet (1) or create a new one (2)? [1/2]: ").strip()
     
@@ -157,8 +167,14 @@ async def get_wallet_password(blockchain: Blockchain) -> str:
             if password != confirm:
                 print("Passwords do not match. Please try again.")
                 continue
-            address = await blockchain.create_wallet()
+            
+            # IMPORTANT: Set the password BEFORE creating the wallet
             blockchain.key_manager.password = password
+            
+            # Now create the wallet with password already set
+            address = await blockchain.create_wallet()
+            
+            # Save wallets with the password already set
             await blockchain.save_wallets()
             print(f"New wallet created with address: {address}")
             return password
@@ -192,12 +208,18 @@ async def get_wallet_password(blockchain: Blockchain) -> str:
 async def async_main(args, loop):
     """Async initialization with retry logic"""
     config = load_config(args.config)
-    if args.p2p_port:
-        config["p2p_port"] = args.p2p_port
-    if args.api_port:
-        config["api_port"] = args.api_port
-    if args.data_dir:
-        config["data_dir"] = args.data_dir
+
+    # Before starting the network
+    for port_name, port_value in [("p2p_port", config["p2p_port"]), 
+                                ("api_port", config["api_port"]), 
+                                ("key_rotation_port", config["key_rotation_port"])]:
+        if not is_port_available(port_value, host="127.0.0.1"):
+            new_port = await find_available_port_async(start_port=port_value+1, end_port=port_value+100, host="127.0.0.1")
+            if new_port:
+                logger.info(f"{port_name.upper()} {port_value} is in use, using alternative port {new_port}")
+                config[port_name] = new_port
+                # Save updated config
+                save_config(config, args.config)
 
     # Parse bootstrap nodes
     bootstrap_nodes = []
@@ -281,23 +303,65 @@ def run_async_loop(loop):
     finally:
         logger.info("Async loop stopped")
 
+# In async_shutdown function in main.py:
 async def async_shutdown(network: BlockchainNetwork, blockchain: Blockchain, shutdown_event: asyncio.Event, loop: asyncio.AbstractEventLoop):
-    """Cleanly shut down all components"""
+    """Cleanly shut down all components with controlled event loop handling"""
     logger.info("Initiating shutdown...")
+    
+    # Signal shutdown to all components
     if shutdown_event:
         shutdown_event.set()
+    
+    # First save important data
     if blockchain:
-        await blockchain.save_chain()
-        await blockchain.save_wallets()
+        try:
+            await blockchain.save_chain()
+            await blockchain.save_wallets()
+        except Exception as e:
+            logger.error(f"Error saving blockchain data during shutdown: {str(e)}")
+    
+    # Stop network services
     if network:
-        await network.stop()
+        try:
+            await network.stop()
+        except Exception as e:
+            logger.error(f"Error stopping network during shutdown: {str(e)}")
+    
+    # Clean blockchain shutdown
     if blockchain:
-        await blockchain.shutdown()
-    tasks = [t for t in asyncio.all_tasks(loop) if not t.done()]
-    for task in tasks:
-        task.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
-    loop.stop()
+        try:
+            await blockchain.shutdown()
+        except Exception as e:
+            logger.error(f"Error during blockchain shutdown: {str(e)}")
+    
+    # Wait a moment for tasks to settle
+    await asyncio.sleep(0.5)
+    
+    # Cancel remaining tasks with protection against recursion
+    try:
+        # Get all tasks but exclude current task
+        current_task = asyncio.current_task(loop)
+        tasks = [t for t in asyncio.all_tasks(loop) if t is not current_task and not t.done()]
+        
+        if tasks:
+            logger.info(f"Cancelling {len(tasks)} remaining tasks")
+            
+            # Cancel each task
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            
+            # Wait for a short duration for tasks to complete cancellation
+            try:
+                # Short timeout to avoid hanging
+                await asyncio.wait(tasks, timeout=1)
+            except Exception as e:
+                logger.warning(f"Error waiting for tasks to cancel: {e}")
+    except Exception as e:
+        logger.error(f"Error cancelling tasks during shutdown: {str(e)}")
+    
+    # Don't stop the event loop here - let it finish naturally
+    logger.info("Shutdown complete")
 
 async def async_main_wrapper():
     """Async wrapper for the main function"""
@@ -305,11 +369,19 @@ async def async_main_wrapper():
     parser.add_argument("--config", type=str, default="network_config.json", help="Path to configuration file")
     parser.add_argument("--p2p-port", type=int, default=None, help="P2P communication port")
     parser.add_argument("--api-port", type=int, default=None, help="HTTP API port")
+    parser.add_argument("--key-rotation-port", type=int, default=None, help="Key rotation port")
     parser.add_argument("--data-dir", type=str, default=None, help="Data directory")
     parser.add_argument("--bootstrap", type=str, default=None, help="Comma-separated list of bootstrap nodes (host:port)")
     parser.add_argument("--validator", action="store_true", help="Run as validator node")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode with additional logging")
 
     args = parser.parse_args()
+
+    # Then update the logging level if --debug is set:
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        for handler in logging.getLogger().handlers:
+            handler.setLevel(logging.DEBUG)
 
     if args.p2p_port and not validate_port(args.p2p_port):
         logger.error("Invalid P2P port number")
@@ -343,17 +415,22 @@ async def async_main_wrapper():
         blockchain, network, security_monitor, mfa_manager, backup_manager, rotation_manager, shutdown_event = await async_main(args, loop)
         
         # Setup GUI with event subscription
-        gui = BlockchainGUI(blockchain, network, mfa_manager=mfa_manager, backup_manager=backup_manager)
-        gui.loop = loop
-        gui.loop_thread = async_thread
-
-        def on_new_block(block):
-            gui.update_chain_display()
-        def on_error(error):
-            gui.show_error(str(error))
+        if threading.current_thread() is threading.main_thread():
+            # Create GUI in main thread
+            web_gui = WebGUI(blockchain, network)
+            await web_gui.run()
             
-        blockchain.subscribe("new_block", on_new_block)
-        blockchain.subscribe("error", on_error)
+            # Set up callbacks using queue instead of direct calls
+            blockchain.subscribe("new_block", lambda block: gui.update_queue.put(
+                lambda: gui.update_chain_display()))
+            blockchain.subscribe("error", lambda error: gui.update_queue.put(
+                lambda: gui.show_error(str(error))))
+            
+        else:
+            # If not in main thread, don't use GUI
+            logger.warning("Not running in main thread, GUI disabled")
+            gui = None
+            gui_thread = None
 
         # Signal handlers
         def signal_handler(sig, frame):
@@ -362,17 +439,6 @@ async def async_main_wrapper():
             
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
-
-        # Run GUI in a separate thread
-        gui_thread = threading.Thread(target=gui.run, daemon=True)
-        gui_thread.start()
-
-        # Wait for GUI and async thread to complete
-        while gui_thread.is_alive() and async_thread.is_alive():
-            await asyncio.sleep(1)
-            if not async_thread.is_alive():
-                logger.error("Async thread crashed unexpectedly")
-                raise RuntimeError("Async loop terminated")
                 
     except Exception as e:
         logger.error(f"Application failed: {e}", exc_info=True)

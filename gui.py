@@ -249,6 +249,7 @@ class BlockchainGUI:
         except Exception as e:
             self.on_error(f"Error handling key rotation: {e}")
 
+    # In gui.py, modify the error reporting method:
     def update_wallet_dropdown(self):
         """Update wallet dropdown"""
         async def fetch_addresses():
@@ -256,8 +257,13 @@ class BlockchainGUI:
                 addresses = await self.blockchain.get_all_addresses()
                 self.update_queue.put(lambda: self.populate_wallet_dropdown(addresses))
             except Exception as e:
-                self.on_error(f"Failed to fetch wallets: {e}")
+                # Use queue_async_error instead of calling on_error directly
+                self.queue_async_error(f"Failed to fetch wallets: {e}")
         asyncio.run_coroutine_threadsafe(fetch_addresses(), self.loop)
+
+    def queue_async_error(self, error_msg):
+        """Queue an error message for display from async context"""
+        self.update_queue.put(lambda: self.show_error(error_msg))
 
     def populate_wallet_dropdown(self, addresses: List[str]):
         menu = self.wallet_dropdown["menu"]
@@ -340,20 +346,32 @@ class BlockchainGUI:
                     await self.blockchain.stop_mining()
                     self.update_queue.put(self.mining_stopped)
                 except Exception as e:
-                    self.on_error(f"Failed to stop mining: {e}")
+                    self.queue_async_error(f"Failed to stop mining: {e}")
             asyncio.run_coroutine_threadsafe(stop(), self.loop)
         else:
             async def start():
                 try:
                     wallet = self.selected_wallet.get()
                     if wallet == "Select Wallet":
-                        self.on_error("Please select a wallet before mining")
+                        # Use queue instead of direct call to on_error
+                        self.queue_async_error("Please select a wallet before mining")
                         return
                     await self.blockchain.start_mining(wallet)
                     self.update_queue.put(self.mining_started)
                 except Exception as e:
-                    self.on_error(f"Failed to start mining: {e}")
+                    self.queue_async_error(f"Failed to start mining: {e}")
             asyncio.run_coroutine_threadsafe(start(), self.loop)
+
+    async def start_mining(self):
+        try:
+            wallet = self.selected_wallet.get()
+            if wallet == "Select Wallet":
+                self.update_queue.put(lambda: self.show_error("Please select a wallet before mining"))
+                return
+            await self.blockchain.start_mining(wallet)
+            self.update_queue.put(self.mining_started)
+        except Exception as e:
+            self.update_queue.put(lambda: self.show_error(f"Failed to start mining: {e}"))
 
     def mining_started(self):
         self.mining = True

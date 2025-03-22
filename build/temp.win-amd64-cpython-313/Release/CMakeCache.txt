@@ -80,10 +80,10 @@ CMAKE_FIND_PACKAGE_REDIRECTS_DIR:STATIC=C:/Users/jdman/OneDrive/Desktop/network/
 CMAKE_INSTALL_PREFIX:PATH=C:/Program Files/blockchain_extensions
 
 //No help, variable specified on the command line.
-CMAKE_LIBRARY_OUTPUT_DIRECTORY:UNINITIALIZED=C:\Users\jdman\OneDrive\Desktop\network
+CMAKE_LIBRARY_OUTPUT_DIRECTORY:UNINITIALIZED=C:\Users\jdman\OneDrive\Desktop\network\cpp_extensions
 
 //No help, variable specified on the command line.
-CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE:UNINITIALIZED=C:\Users\jdman\OneDrive\Desktop\network
+CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE:UNINITIALIZED=C:\Users\jdman\OneDrive\Desktop\network\cpp_extensions
 
 //Path to a program.
 CMAKE_LINKER:FILEPATH=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.43.34808/bin/Hostx64/x64/link.exe
@@ -215,8 +215,8 @@ SSL_EAY_DEBUG:FILEPATH=C:/Program Files/OpenSSL-Win64/lib/VC/x64/MDd/libssl.lib
 //Path to a library.
 SSL_EAY_RELEASE:FILEPATH=C:/Program Files/OpenSSL-Win64/lib/VC/x64/MD/libssl.lib
 
-//Dependencies for the target
-blockchain_cpp_LIB_DEPENDS:STATIC=optimized;C:/Program Files/OpenSSL-Win64/lib/VC/x64/MD/libssl.lib;debug;C:/Program Files/OpenSSL-Win64/lib/VC/x64/MDd/libssl.lib;optimized;C:/Program Files/OpenSSL-Win64/lib/VC/x64/MD/libcrypto.lib;debug;C:/Program Files/OpenSSL-Win64/lib/VC/x64/MDd/libcrypto.lib;
+//No help, variable specified on the command line.
+WITH_CUDA:UNINITIALIZED=ON
 
 //Value Computed by CMake
 blockchain_extensions_BINARY_DIR:STATIC=C:/Users/jdman/OneDrive/Desktop/network/build/temp.win-amd64-cpython-313/Release

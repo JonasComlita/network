@@ -5,7 +5,10 @@
       <FullPath>C:\Users\jdman\OneDrive\Desktop\network\build\temp.win-amd64-cpython-313\Release\x64\Release\ZERO_CHECK</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>C:\Users\jdman\OneDrive\Desktop\network\blockchain_cpp.pyd</FullPath>
+      <FullPath>C:\Users\jdman\OneDrive\Desktop\network\cpp_extensions\blockchain_cpp.pyd</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\jdman\OneDrive\Desktop\network\cpp_extensions\utxo_cpp.pyd</FullPath>
     </ProjectOutput>
     <ProjectOutput>
       <FullPath>C:\Users\jdman\OneDrive\Desktop\network\build\temp.win-amd64-cpython-313\Release\x64\Release\ALL_BUILD</FullPath>

@@ -15,7 +15,6 @@ from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from collections import defaultdict
 import ecdsa
 from pathlib import Path
-from utils import serialize_block, deserialize_block, serialize_transaction, deserialize_transaction_dict
 from blockchain.transaction import Transaction
 
 from .p2p import (
@@ -165,6 +164,11 @@ class BlockchainNetwork:
                  bootstrap_nodes: Optional[List[Tuple[str, int]]] = None, security_monitor=None,
                  config_path = "network_config.json"):
         # Load configuration
+        self._starting_server = False
+        self._session = None
+        self._initialized = False
+        self._initializing = False
+        self._server_started = False
         self.config = load_config(config_path)
         
         # Use provided port or default from config
@@ -223,130 +227,211 @@ class BlockchainNetwork:
         logger.info(f"BlockchainNetwork initialized with port: {self.port}")
 
     def init_ssl(self):
-        """Initialize SSL contexts"""
+        """Initialize SSL contexts with more robust error handling"""
         if self.port is None:
             logger.warning(f"Skipping SSL initialization for {self.node_id} as port is None")
             return
 
-        # Client SSL context
-        self.client_ssl_context = ssl.create_default_context()
-        self.client_ssl_context.check_hostname = False
-        self.client_ssl_context.verify_mode = ssl.CERT_NONE
-
-        # Server SSL context
+        # Create directories
+        cert_dir = os.path.join("data", "certs")
+        os.makedirs(cert_dir, exist_ok=True)
+        
+        # Define certificate paths with clear naming
+        cert_path = os.path.join(cert_dir, f"node-{self.node_id}.crt")
+        key_path = os.path.join(cert_dir, f"node-{self.node_id}.key")
+        
         try:
-            # Use port-specific certificate paths
-            cert_path = f"certs/{self.node_id}_{self.port}.crt"
-            key_path = f"certs/{self.node_id}_{self.port}.key"
-            
-            # Ensure certs directory exists
-            os.makedirs("certs", exist_ok=True)
-            
-            # Debug file existence and paths
-            logger.debug(f"Checking SSL for {self.node_id} on port {self.port}: "
-                        f"cert_path={cert_path}, exists={os.path.exists(cert_path)}, "
-                        f"key_path={key_path}, exists={os.path.exists(key_path)}")
-            
-            # Generate self-signed certificate if files are missing
+            # Check if certificates exist
             if not (os.path.exists(cert_path) and os.path.exists(key_path)):
-                logger.info(f"SSL certificates not found for {self.node_id} on port {self.port}. Generating self-signed certificates...")
-                cmd = (
-                    f'openssl req -x509 -newkey rsa:2048 -keyout "{key_path}" '
-                    f'-out "{cert_path}" -days 365 -nodes -subj "/CN={self.node_id}"'
+                logger.warning(f"Certificate files for node {self.node_id} not found at {cert_path} and {key_path}, generating self-signed certificates (not recommended for production)")
+                
+                # Generate a self-signed certificate with key usage extensions
+                openssl_cmd = (
+                    f'openssl req -new -x509 -days 365 -nodes '
+                    f'-newkey rsa:2048 -keyout "{key_path}" -out "{cert_path}" '
+                    f'-subj "/CN={self.host}" -addext "keyUsage=digitalSignature,keyEncipherment" '
+                    f'-addext "extendedKeyUsage=serverAuth"'
                 )
-                with open(os.devnull, 'w') as devnull:
-                    result = os.system(f"{cmd} > {os.devnull} 2>&1")
-                if result != 0:
-                    raise RuntimeError(f"Failed to generate SSL certificates for {self.node_id} on port {self.port} with OpenSSL")
-                logger.info(f"Generated self-signed certificates: {cert_path}, {key_path}")
-            else:
-                logger.debug(f"Using existing SSL certificates for {self.node_id} on port {self.port}")
+                
+                os.system(openssl_cmd)  # Using os.system for simplicity
+                
+                if not (os.path.exists(cert_path) and os.path.exists(key_path)):
+                    raise FileNotFoundError(f"Failed to generate certificates at {cert_path} and {key_path}")
             
-            # Load the certificates
+            # Create server SSL context
             self.ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            self.ssl_context.load_cert_chain(
-                certfile=cert_path,
-                keyfile=key_path
-            )
-            logger.info(f"HTTPS enabled with certificates for {self.node_id} on port {self.port}")
+            self.ssl_context.load_cert_chain(cert_path, key_path)
             
+            # Create client SSL context that doesn't verify certificates
+            # This resolves the SSL verification errors but is not secure for production
+            self.client_ssl_context = ssl.create_default_context()
+            self.client_ssl_context.check_hostname = False
+            self.client_ssl_context.verify_mode = ssl.CERT_NONE
+            
+            logger.info(f"HTTPS enabled with certificates for {self.node_id} on port {self.port}")
+        
         except Exception as e:
-            logger.error(f"Failed to initialize SSL for {self.node_id} on port {self.port}: {e}", exc_info=True)
-            logger.warning(f"Running without HTTPS for {self.node_id} on port {self.port} due to SSL failure")
+            logger.error(f"SSL initialization error: {str(e)}")
+            # Create fallback contexts that don't use SSL
             self.ssl_context = None
+            self.client_ssl_context = ssl.create_default_context()
+            self.client_ssl_context.check_hostname = False
+            self.client_ssl_context.verify_mode = ssl.CERT_NONE
+            logger.warning(f"SSL disabled due to initialization error. Running in insecure mode.")
 
     async def start_server(self):
-        """Start the P2P and API servers"""
+        """Start the P2P and API servers with robust port conflict handling"""
+        if self._starting_server:
+            logger.warning("Server already in progress for {self.node_id}")
+            return
+        self._starting_server = True
         try:
             # Start the web API
             await self.runner.setup()
-            self.site = web.TCPSite(
-                self.runner, 
-                self.host, 
-                self.api_port,
-                ssl_context=self.ssl_context
-            )
-            await self.site.start()
-            logger.info(f"API server started on {self.host}:{self.api_port}")
             
-            # Start a simple health check server
+            # Find an available API port
+            api_port_found = False
+            current_api_port = self.api_port
+            max_attempts = 10
+            
+            for attempt in range(max_attempts):
+                try:
+                    self.site = web.TCPSite(
+                        self.runner, 
+                        self.host, 
+                        current_api_port,
+                        ssl_context=self.ssl_context
+                    )
+                    await self.site.start()
+                    # Only log success if we actually start the server successfully
+                    logger.info(f"API server started on {self.host}:{current_api_port}")
+                    self.api_port = current_api_port  # Update the instance attribute
+                    api_port_found = True
+                    break
+                except OSError as e:
+                    # Log error but don't claim success
+                    logger.error(f"Failed to start server: {e}")
+                    if "address already in use" in str(e).lower():
+                        current_api_port += 1
+                    else:
+                        raise
+                        
+            # Only proceed if we actually found an available port
+            if not api_port_found:
+                logger.error(f"Failed to find available API port after {max_attempts} attempts")
+                return False
+            
+            # Setup health check app
             health_app = web.Application()
             health_app.router.add_get('/health', lambda request: web.Response(text="OK"))
             health_runner = web.AppRunner(health_app)
             await health_runner.setup()
-            self.health_site = web.TCPSite(
-                health_runner, 
-                self.host, 
-                self.port,
-                ssl_context=self.ssl_context
-            )
-            await self.health_site.start()
-            logger.info(f"Health check endpoint added on {self.host}:{self.port}/health")
             
-            return True
+            # Try to start health check with port discovery
+            health_port_found = False
+            current_health_port = self.port
+            
+            for attempt in range(max_attempts):
+                try:
+                    # Try without SSL first for health check
+                    self.health_site = web.TCPSite(
+                        health_runner, 
+                        self.host, 
+                        current_health_port
+                    )
+                    await self.health_site.start()
+                    logger.info(f"Health check endpoint added on {self.host}:{current_health_port}/health")
+                    self.port = current_health_port  # Update the port if found
+                    health_port_found = True
+                    break
+                except OSError as e:
+                    if "address already in use" in str(e).lower():
+                        logger.warning(f"Health check port {current_health_port} is in use, trying next port...")
+                        current_health_port += 1
+                    else:
+                        raise
+            
+            if not health_port_found:
+                logger.warning(f"Failed to start health check after {max_attempts} attempts")
+                # Continue anyway, as this isn't critical
+            
+            return api_port_found
+            
         except Exception as e:
             logger.error(f"Failed to start server: {e}")
-            raise
+            return False
+        finally:
+            self._starting_server = False
+
+    async def get_session(self):
+        """Get a shared client session, creating it if necessary"""
+        if self._session is None:
+            self._session = aiohttp.ClientSession()
+        return self._session
 
     async def start(self):
         """Start the network with periodic discovery and sync"""
-        if self.loop is None:
-            self.loop = asyncio.get_event_loop()
+        if self._initialized:
+            logger.warning(f"Network {self.node_id} already initialized, skipping start")
+            return
+            
+        if self._initializing:
+            logger.warning(f"Network {self.node_id} initialization in progress, waiting...")
+            while self._initializing:
+                await asyncio.sleep(0.1)
+            if self._initialized:
+                return
+        
+        self._initializing = True
+        
+        try:
+            if self.loop is None:
+                self.loop = asyncio.get_event_loop()
 
-        # Initialize identity and certificates
-        await self.identity.initialize()
-        self.node_id, self.private_key, self.public_key = self.identity.node_id, self.identity.private_key, self.identity.public_key
-        self.ssl_context, self.client_ssl_context = await self.cert_manager.initialize()
+            # Initialize identity and certificates
+            await self.identity.initialize()
+            self.node_id, self.private_key, self.public_key = self.identity.node_id, self.identity.private_key, self.identity.public_key
+            self.ssl_context, self.client_ssl_context = await self.cert_manager.initialize()
 
-        # Connect to bootstrap nodes
-        for host, port in self.bootstrap_nodes:
-            if (host, port) != (self.host, self.port):
-                peer_id = f"node{port}"
-                await self.add_peer(peer_id, host, port, self.public_key)  # Use public key as initial auth
+            # Connect to bootstrap nodes
+            for host, port in self.bootstrap_nodes:
+                if (host, port) != (self.host, self.port):
+                    peer_id = f"node{port}"
+                    await self.add_peer(peer_id, host, port, self.public_key)  # Use public key as initial auth
 
-        # Start server
-        self.server_task_handle = asyncio.create_task(self.start_server())
-        self.background_tasks.append(self.server_task_handle)
+            # Start server
+            if not self._server_started:
+                self.server_task_handle = asyncio.create_task(self.start_server())
+                self.background_tasks.append(self.server_task_handle)
+                self._server_started = True
 
-        # Start periodic tasks
-        self.sync_task = await self.start_periodic_sync(interval=self.config["sync_interval"])
-        self.discovery_task = asyncio.create_task(self.periodic_discovery())
-        self.background_tasks.append(self.discovery_task)
+            # Start periodic tasks
+            self.sync_task = await self.start_periodic_sync(interval=self.config["sync_interval"])
+            self.discovery_task = asyncio.create_task(self.periodic_discovery())
+            self.background_tasks.append(self.discovery_task)
 
-        # Start security monitoring
-        if self.security_monitor:
-            asyncio.create_task(self.security_monitor.analyze_patterns())
+            # Start security monitoring
+            if self.security_monitor:
+                asyncio.create_task(self.security_monitor.analyze_patterns())
 
-        logger.info(f"Network started on {self.host}:{self.port} with sync interval {self.config['sync_interval']}s")
+            logger.info(f"Network started on {self.host}:{self.port} with sync interval {self.config['sync_interval']}s")
 
-        self.broadcast_task = asyncio.create_task(self.process_message_queue())
-        self.background_tasks.append(self.broadcast_task)
+            self.broadcast_task = asyncio.create_task(self.process_message_queue())
+            self.background_tasks.append(self.broadcast_task)
+
+            self._initialized = True
+        finally:
+            self._initializing = False
 
     async def stop(self):
         """Stop the network and cancel background tasks."""
         logger.info("Stopping network...")
         self.shutdown_flag.set()  # Signal shutdown
         tasks_to_cancel = []
+
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
 
         # Cancel background tasks
         for task in self.background_tasks:

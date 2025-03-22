@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mining Loader Demo</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        .mining-loader {
+            width: 80vw;
+            height: 60vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Load React and ReactDOM from CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Load Three.js from CDN (verified URL) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <!-- Babel to transpile JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- MiningLoader component -->
+    <script type="text/babel" data-presets="react">
+        const { useEffect, useRef } = React;
+
+        const MiningLoader = () => {
+            const mountRef = useRef(null);
+            const sceneRef = useRef(null);
+
+            useEffect(() => {
+                console.log("useEffect running, THREE available:", typeof THREE !== 'undefined');
+                const scenes = [
+                    createMarioScene,
+                    createMinerScene,
+                    createGokuScene
+                ];
+                const randomScene = scenes[Math.floor(Math.random() * scenes.length)];
+                sceneRef.current = randomScene();
+
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth * 0.8, window.innerHeight * 0.6);
+                mountRef.current.appendChild(renderer.domElement);
+
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    sceneRef.current.animate();
+                    renderer.render(sceneRef.current.scene, sceneRef.current.camera);
+                };
+                animate();
+
+                const handleResize = () => {
+                    renderer.setSize(window.innerWidth * 0.8, window.innerHeight * 0.6);
+                    sceneRef.current.camera.aspect = (window.innerWidth * 0.8) / (window.innerHeight * 0.6);
+                    sceneRef.current.camera.updateProjectionMatrix();
+                };
+                window.addEventListener('resize', handleResize);
+
+                return () => {
+                    window.removeEventListener('resize', handleResize);
+                    if (mountRef.current && renderer.domElement) {
+                        mountRef.current.removeChild(renderer.domElement);
+                    }
+                    sceneRef.current.dispose();
+                };
+            }, []);
+
+            return <div ref={mountRef} className="mining-loader" />;
+        };
+
+        const createMarioScene = () => {
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+
+            const camera = new THREE.PerspectiveCamera(75, (window.innerWidth * 0.8) / (window.innerHeight * 0.6), 0.1, 1000);
+            camera.position.set(0, 5, 10);
+
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 5);
+            scene.add(light);
+
+            const marioGeo = new THREE.BoxGeometry(1, 1, 1);
+            const marioMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+            const mario = new THREE.Mesh(marioGeo, marioMat);
+            mario.position.y = 0.5;
+            scene.add(mario);
+
+            const hatGeo = new THREE.BoxGeometry(1.2, 0.3, 1.2);
+            const hatMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+            const hat = new THREE.Mesh(hatGeo, hatMat);
+            hat.position.y = 0.9;
+            mario.add(hat);
+
+            const blockGeo = new THREE.BoxGeometry(1, 1, 1);
+            const blockMat = new THREE.MeshPhongMaterial({ color: 0xffff00, emissive: 0x333300 });
+            const block = new THREE.Mesh(blockGeo, blockMat);
+            block.position.set(0, 3, 0);
+            scene.add(block);
+
+            let jumpDirection = 1;
+            let jumpHeight = 0;
+
+            const animate = () => {
+                jumpHeight += 0.1 * jumpDirection;
+                mario.position.y = 0.5 + jumpHeight;
+                if (mario.position.y >= 2.5) {
+                    jumpDirection = -1;
+                    block.scale.set(0.9, 0.9, 0.9);
+                    setTimeout(() => block.scale.set(1, 1, 1), 100);
+                } else if (mario.position.y <= 0.5) {
+                    jumpDirection = 1;
+                }
+            };
+
+            const dispose = () => {
+                scene.clear();
+            };
+
+            return { scene, camera, animate, dispose };
+        };
+
+        const createMinerScene = () => {
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x444444);
+
+            const camera = new THREE.PerspectiveCamera(75, (window.innerWidth * 0.8) / (window.innerHeight * 0.6), 0.1, 1000);
+            camera.position.set(0, 5, 10);
+
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 5);
+            scene.add(light);
+
+            const minerGeo = new THREE.BoxGeometry(1, 2, 1);
+            const minerMat = new THREE.MeshPhongMaterial({ color: 0x0000ff });
+            const miner = new THREE.Mesh(minerGeo, minerMat);
+            miner.position.y = 1;
+            scene.add(miner);
+
+            const pickGeo = new THREE.BoxGeometry(0.2, 2, 0.2);
+            const pickMat = new THREE.MeshPhongMaterial({ color: 0x808080 });
+            const pickaxe = new THREE.Mesh(pickGeo, pickMat);
+            pickaxe.position.set(1, 1, 0);
+            miner.add(pickaxe);
+
+            const oreGeo = new THREE.SphereGeometry(0.5, 32, 32);
+            const oreMat = new THREE.MeshPhongMaterial({ color: 0x00ff00, emissive: 0x003300 });
+            const ore = new THREE.Mesh(oreGeo, oreMat);
+            ore.position.set(2, 1, 0);
+            scene.add(ore);
+
+            let swingAngle = 0;
+
+            const animate = () => {
+                swingAngle += 0.1;
+                pickaxe.rotation.z = Math.sin(swingAngle) * 0.5;
+                ore.scale.set(1 + Math.sin(swingAngle) * 0.1, 1 + Math.sin(swingAngle) * 0.1, 1 + Math.sin(swingAngle) * 0.1);
+            };
+
+            const dispose = () => {
+                scene.clear();
+            };
+
+            return { scene, camera, animate, dispose };
+        };
+
+        const createGokuScene = () => {
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000033);
+
+            const camera = new THREE.PerspectiveCamera(75, (window.innerWidth * 0.8) / (window.innerHeight * 0.6), 0.1, 1000);
+            camera.position.set(0, 5, 10);
+
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 5);
+            scene.add(light);
+
+            const gokuGeo = new THREE.BoxGeometry(1, 2, 1);
+            const gokuMat = new THREE.MeshPhongMaterial({ color: 0xff4500 });
+            const goku = new THREE.Mesh(gokuGeo, gokuMat);
+            goku.position.y = 1;
+            scene.add(goku);
+
+            const particlesGeo = new THREE.BufferGeometry();
+            const particleCount = 100;
+            const positions = new Float32Array(particleCount * 3);
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 5;
+                positions[i + 1] = (Math.random() - 0.5) * 5 + 1;
+                positions[i + 2] = (Math.random() - 0.5) * 5;
+            }
+            particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const particlesMat = new THREE.PointsMaterial({ color: 0xffff00, size: 0.2 });
+            const aura = new THREE.Points(particlesGeo, particlesMat);
+            scene.add(aura);
+
+            let auraTime = 0;
+
+            const animate = () => {
+                auraTime += 0.05;
+                goku.position.y = 1 + Math.sin(auraTime) * 0.2;
+                aura.rotation.y += 0.02;
+                const positions = aura.geometry.attributes.position.array;
+                for (let i = 0; i < particleCount * 3; i += 3) {
+                    positions[i + 1] += Math.sin(auraTime + i) * 0.02;
+                    if (positions[i + 1] > 3) positions[i + 1] = -1;
+                }
+                aura.geometry.attributes.position.needsUpdate = true;
+            };
+
+            const dispose = () => {
+                scene.clear();
+                particlesGeo.dispose();
+                particlesMat.dispose();
+            };
+
+            return { scene, camera, animate, dispose };
+        };
+
+        window.MiningLoader = MiningLoader; // Expose component globally for the next script
+    </script>
+
+    <!-- Render the component after all scripts are loaded -->
+    <script>
+        window.onload = function() {
+            console.log("Window loaded. THREE available:", typeof THREE !== 'undefined');
+            if (typeof THREE === 'undefined') {
+                console.error("Three.js failed to load. Check the CDN URL or network connection.");
+                return;
+            }
+            if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
+                console.error("React or ReactDOM failed to load.");
+                return;
+            }
+            console.log("Rendering MiningLoader...");
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(React.createElement(window.MiningLoader));
+        };
+    </script>
+</body>
+</html>

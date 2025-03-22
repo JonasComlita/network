@@ -159,8 +159,13 @@ class SecurityUtils:
 
     @staticmethod
     def public_key_to_address(public_key: str) -> str:
-        """Convert a public key to a blockchain address."""
+        """Convert a public key to a blockchain address using Base58Check encoding."""
         try:
+            # Use C++ implementation if available
+            if CPP_ACCELERATED:
+                return blockchain_cpp.public_key_to_address(public_key)
+            
+            # Fallback to Python implementation
             pub_bytes = bytes.fromhex(public_key)
             sha256_hash = hashlib.sha256(pub_bytes).hexdigest()
             ripemd160_hash = hashlib.new('ripemd160', bytes.fromhex(sha256_hash)).hexdigest()
@@ -274,6 +279,14 @@ def get_secure_password(provided_password: str = None) -> str:
 # New utils/serialization.py
 import msgpack
 from typing import Any, Dict
+
+def serialize(data: Any) -> bytes:
+    """Serialize data using msgpack for network transmission"""
+    return msgpack.packb(data, use_bin_type=True)
+
+def deserialize(data: bytes) -> Any:
+    """Deserialize msgpack data from network transmission"""
+    return msgpack.unpackb(data, raw=False)
 
 def serialize_block(data: Any) -> bytes:
     """Serialize data using msgpack"""

@@ -136,8 +136,8 @@ setup(
         'Topic :: System :: Distributed Computing',
     ],
     ext_modules=[
-        CMakeExtension('blockchain_cpp'),
-        CMakeExtension('utxo_cpp')  # Added utxo_cpp extension
+        CMakeExtension('cpp_extensions/blockchain_cpp'),
+        CMakeExtension('cpp_extensions/utxo_cpp')  # Added utxo_cpp extension
     ],
     cmdclass={'build_ext': CMakeBuild},
     zip_safe=False,

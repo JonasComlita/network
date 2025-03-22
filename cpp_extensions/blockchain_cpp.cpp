@@ -8,57 +8,184 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
-#include <future>
-#include <random>
-#include <functional>
-#include <chrono>
 #include <algorithm>
-#include <condition_variable>
+#include <numeric>
 
 namespace py = pybind11;
 
-// SHA-256 implementation for OpenSSL 3.0
-std::string sha256(const std::string &input)
+// Base58 character set
+static const char *BASE58_CHARS = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+// Convert bytes to hexadecimal string
+std::string bytes_to_hex(const std::vector<unsigned char> &data)
+{
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+    for (const auto &byte : data)
+    {
+        ss << std::setw(2) << static_cast<int>(byte);
+    }
+    return ss.str();
+}
+
+// Convert hexadecimal string to bytes
+std::vector<unsigned char> hex_to_bytes(const std::string &hex)
+{
+    std::vector<unsigned char> bytes;
+    for (size_t i = 0; i < hex.length(); i += 2)
+    {
+        std::string byteString = hex.substr(i, 2);
+        unsigned char byte = static_cast<unsigned char>(std::strtol(byteString.c_str(), nullptr, 16));
+        bytes.push_back(byte);
+    }
+    return bytes;
+}
+
+// SHA-256 implementation using OpenSSL
+std::vector<unsigned char> sha256_bytes(const std::vector<unsigned char> &input)
 {
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
     const EVP_MD *md = EVP_sha256();
     unsigned char hash[EVP_MAX_MD_SIZE];
     unsigned int hash_length;
 
-    EVP_DigestInit_ex(mdctx, md, NULL);
-    EVP_DigestUpdate(mdctx, input.c_str(), input.length());
+    EVP_DigestInit_ex(mdctx, md, nullptr);
+    EVP_DigestUpdate(mdctx, input.data(), input.size());
     EVP_DigestFinal_ex(mdctx, hash, &hash_length);
     EVP_MD_CTX_free(mdctx);
 
-    std::stringstream ss;
-    for (unsigned int i = 0; i < hash_length; i++)
-    {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
-    }
-    return ss.str();
+    return std::vector<unsigned char>(hash, hash + hash_length);
+}
+
+// Double SHA-256 hash
+std::vector<unsigned char> double_sha256(const std::vector<unsigned char> &input)
+{
+    std::vector<unsigned char> first_hash = sha256_bytes(input);
+    return sha256_bytes(first_hash);
+}
+
+// SHA-256 hash of a string, returned as string
+std::string sha256(const std::string &input)
+{
+    std::vector<unsigned char> input_bytes(input.begin(), input.end());
+    std::vector<unsigned char> hash_bytes = sha256_bytes(input_bytes);
+    return bytes_to_hex(hash_bytes);
 }
 
 // RIPEMD-160 implementation using OpenSSL
-std::string ripemd160(const std::string &input)
+std::vector<unsigned char> ripemd160_bytes(const std::vector<unsigned char> &input)
 {
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
     const EVP_MD *md = EVP_ripemd160();
     unsigned char hash[EVP_MAX_MD_SIZE];
     unsigned int hash_length;
 
-    EVP_DigestInit_ex(mdctx, md, NULL);
-    EVP_DigestUpdate(mdctx, input.c_str(), input.length());
+    EVP_DigestInit_ex(mdctx, md, nullptr);
+    EVP_DigestUpdate(mdctx, input.data(), input.size());
     EVP_DigestFinal_ex(mdctx, hash, &hash_length);
     EVP_MD_CTX_free(mdctx);
 
-    std::stringstream ss;
-    for (unsigned int i = 0; i < hash_length; i++)
-    {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
-    }
-    return ss.str();
+    return std::vector<unsigned char>(hash, hash + hash_length);
 }
 
+// RIPEMD-160 hash of a string, returned as string
+std::string ripemd160(const std::string &input)
+{
+    std::vector<unsigned char> input_bytes(input.begin(), input.end());
+    std::vector<unsigned char> hash_bytes = ripemd160_bytes(input_bytes);
+    return bytes_to_hex(hash_bytes);
+}
+
+// Base58 encode a byte vector
+std::string base58_encode(const std::vector<unsigned char> &input)
+{
+    // Count leading zeros
+    size_t zeros = 0;
+    while (zeros < input.size() && input[zeros] == 0)
+    {
+        zeros++;
+    }
+
+    // Allocate enough space for the result
+    std::vector<unsigned char> result((input.size() - zeros) * 138 / 100 + 1);
+    size_t result_size = 0;
+
+    // Convert from base256 to base58
+    for (size_t i = zeros; i < input.size(); i++)
+    {
+        int carry = input[i];
+        size_t j = 0;
+        for (size_t k = result_size; j < k || carry != 0; j++)
+        {
+            if (j < result_size)
+            {
+                carry += 256 * result[j];
+            }
+            result[j] = carry % 58;
+            carry /= 58;
+        }
+        result_size = j;
+    }
+
+    // Skip leading zeros in result
+    size_t leading_zeros = 0;
+    while (leading_zeros < result_size && result[leading_zeros] == 0)
+    {
+        leading_zeros++;
+    }
+
+    // Build the resulting string
+    std::string encoded;
+    encoded.reserve(zeros + (result_size - leading_zeros));
+
+    // Add leading '1's for each zero byte
+    encoded.append(zeros, '1');
+
+    // Add the rest of the encoded characters
+    for (size_t i = leading_zeros; i < result_size; i++)
+    {
+        encoded += BASE58_CHARS[result[result_size - 1 - i + leading_zeros]];
+    }
+
+    return encoded;
+}
+
+// Base58Check encoding for Bitcoin addresses
+std::string base58check_encode(const std::vector<unsigned char> &payload, unsigned char version)
+{
+    // Prepend version byte
+    std::vector<unsigned char> extended_payload;
+    extended_payload.push_back(version);
+    extended_payload.insert(extended_payload.end(), payload.begin(), payload.end());
+
+    // Calculate checksum (first 4 bytes of double SHA-256)
+    std::vector<unsigned char> checksum = double_sha256(extended_payload);
+    checksum.resize(4); // Take first 4 bytes
+
+    // Append checksum to extended payload
+    extended_payload.insert(extended_payload.end(), checksum.begin(), checksum.end());
+
+    // Base58 encode the result
+    return base58_encode(extended_payload);
+}
+
+// Enhanced Bitcoin address generation from public key
+std::string public_key_to_address(const std::string &public_key, unsigned char version = 0x00)
+{
+    // Convert hex public key to bytes
+    std::vector<unsigned char> public_key_bytes = hex_to_bytes(public_key);
+
+    // 1. SHA-256 hash of the public key
+    std::vector<unsigned char> sha256_hash = sha256_bytes(public_key_bytes);
+
+    // 2. RIPEMD-160 hash of the SHA-256 hash
+    std::vector<unsigned char> ripemd_hash = ripemd160_bytes(sha256_hash);
+
+    // 3. Base58Check encode with version byte (0x00 for Bitcoin main network)
+    return base58check_encode(ripemd_hash, version);
+}
+
+// Calculate Merkle root from transaction IDs
 std::string calculate_merkle_root(const std::vector<std::string> &tx_ids)
 {
     if (tx_ids.empty())
@@ -82,23 +209,7 @@ std::string calculate_merkle_root(const std::vector<std::string> &tx_ids)
     return tree[0];
 }
 
-// Convert public key to blockchain address
-std::string public_key_to_address(const std::string &public_key)
-{
-    // Perform SHA-256 hash on the public key
-    std::string sha256_hash = sha256(public_key);
-
-    // Perform RIPEMD-160 hash on the SHA-256 hash
-    std::string ripemd_hash = ripemd160(sha256_hash);
-
-    // Take first 10 characters of RIPEMD-160 hash
-    std::string truncated_hash = ripemd_hash.substr(0, 10);
-
-    // Prepend with '1' to indicate a standard public key hash address
-    return "1" + truncated_hash;
-}
-
-// Modified to return non-atomic types
+// Mining function
 std::tuple<int, std::string, long> mine_block(const std::string &block_string_base, int difficulty, int max_nonce = INT_MAX)
 {
     std::string target(difficulty, '0');
@@ -134,7 +245,6 @@ std::tuple<int, std::string, long> mine_block(const std::string &block_string_ba
                     std::lock_guard<std::mutex> lock(result_mutex);
                     if (!found_solution) {
                         found_solution = true;
-                        // Convert atomic to regular int for std::tuple
                         result_nonce.store(nonce);
                         result_hash = hash;
                     }
@@ -156,7 +266,6 @@ std::tuple<int, std::string, long> mine_block(const std::string &block_string_ba
 
     if (found_solution)
     {
-        // Convert atomic to regular types for tuple
         return std::make_tuple(result_nonce.load(), result_hash, total_hashes.load());
     }
     else
@@ -165,13 +274,24 @@ std::tuple<int, std::string, long> mine_block(const std::string &block_string_ba
     }
 }
 
+// Python module definition
 PYBIND11_MODULE(blockchain_cpp, m)
 {
-    m.doc() = "C++ acceleration library for blockchain operations";
+    m.doc() = "C++ acceleration library for blockchain operations with enhanced address encoding";
 
     m.def("sha256", &sha256, "Calculate SHA-256 hash of input string");
+    m.def("ripemd160", &ripemd160, "Calculate RIPEMD-160 hash of input string");
     m.def("calculate_merkle_root", &calculate_merkle_root, "Calculate Merkle root from transaction IDs");
     m.def("mine_block", &mine_block, "Mine a block with the given difficulty",
           py::arg("block_string_base"), py::arg("difficulty"), py::arg("max_nonce") = INT_MAX);
-    m.def("public_key_to_address", &public_key_to_address, "Convert public key to blockchain address");
+    m.def("public_key_to_address", &public_key_to_address, "Convert public key to blockchain address with Base58Check encoding",
+          py::arg("public_key"), py::arg("version") = 0x00);
+    m.def("base58_encode", [](const std::string &input)
+          {
+        std::vector<unsigned char> bytes(input.begin(), input.end());
+        return base58_encode(bytes); }, "Encode data as Base58 string");
+    m.def("base58check_encode", [](const std::string &payload, unsigned char version)
+          {
+        std::vector<unsigned char> bytes(payload.begin(), payload.end());
+        return base58check_encode(bytes, version); }, "Encode data with Base58Check encoding", py::arg("payload"), py::arg("version") = 0x00);
 }
