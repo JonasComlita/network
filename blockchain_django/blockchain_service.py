@@ -3,9 +3,18 @@ import os
 import asyncio
 import threading
 import logging
+from typing import Optional, Dict, Any
 import time 
 
 logger = logging.getLogger(__name__)
+
+# At the very top of the file, before other imports
+try:
+    import fix_postgres
+    import fix_asyncio
+except ImportError:
+    print("Warning: fix_postgres.py not found - database connections may fail")
+    print(f"Current working directory: {os.getcwd()}")
 
 # Global reference to blockchain instance
 _blockchain_instance = None
@@ -32,16 +41,28 @@ def run_blockchain_thread():
         _event_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(_event_loop)
         
-        # Return a DummyBlockchain for now to avoid initialization issues
-        # We'll update this to use the real blockchain when we fix the initialization issue
-        dummy = DummyBlockchain()
+        # Import here to avoid circular imports
+        from blockchain.blockchain import Blockchain
+        
+        # Create a directory for blockchain data if it doesn't exist
+        data_dir = os.path.abspath("blockchain_data")
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Create blockchain with only the parameters it supports
+        # Based on the error, it doesn't accept a database_url parameter
+        blockchain = Blockchain(
+            node_id="main_node"
+        )
+        
+        # Run initialization in the event loop
+        _event_loop.run_until_complete(blockchain.initialize())
         
         # Update global reference
         global _blockchain_instance, _blockchain_initialized
-        _blockchain_instance = dummy
+        _blockchain_instance = blockchain
         _blockchain_initialized = True
         
-        logger.info("Dummy blockchain initialized in background thread")
+        logger.info("Blockchain initialized in background thread")
         
         # Keep the event loop running to handle future tasks
         _event_loop.run_forever()
@@ -140,18 +161,15 @@ def execute_async_blockchain_operation(coro, timeout=30):
         logger.error(f"Error in blockchain operation: {e}", exc_info=True)
         raise
 
+# Add this to blockchain_service.py
+
 class DummyBlockchain:
     """A placeholder blockchain that won't crash wallet info views"""
     def __init__(self):
-        self.initialized = True  # Set to True to avoid initialization attempts
+        self.initialized = False
         self.listeners = {"new_block": [], "new_transaction": []}
-        logger.info("DummyBlockchain created")
         
-    async def initialize(self):
-        """Dummy initialize method that does nothing"""
-        logger.info("DummyBlockchain.initialize called")
-        return True
-        
+    # Add subscribe method to prevent errors in consumers
     def subscribe(self, event_type, callback):
         """Dummy implementation of subscribe to prevent errors"""
         if event_type not in self.listeners:
@@ -161,6 +179,7 @@ class DummyBlockchain:
         logger.info(f"Added callback to dummy blockchain for {event_type}")
         return True
         
+    # Add unsubscribe method for completeness
     def unsubscribe(self, event_type, callback):
         """Dummy implementation of unsubscribe"""
         if event_type in self.listeners and callback in self.listeners[event_type]:
@@ -178,24 +197,52 @@ class DummyBlockchain:
         return 0.0
         
     async def create_wallet(self, user_id=None, wallet_passphrase=None):
-        return "dummy_wallet_address"
+        raise RuntimeError("Blockchain not initialized")
         
     async def get_transactions_for_address(self, address, limit=50):
         return []
         
     async def create_transaction(self, private_key, sender, recipient, amount, memo=""):
-        return {
-            "status": "error",
-            "message": "Blockchain not initialized"
-        }
+        raise RuntimeError("Blockchain not initialized")
         
     async def add_transaction_to_mempool(self, transaction):
         return False
         
-    async def shutdown(self):
-        """Dummy shutdown method that does nothing"""
-        logger.info("DummyBlockchain.shutdown called")
-        return True
+    # Add a safe hash function for debugging
+    def generate_mock_block(self):
+        """Generate a mock block for testing subscribers"""
+        import time
+        import hashlib
+        
+        # Create a simple block-like structure
+        timestamp = time.time()
+        mock_block = {
+            'index': 0,
+            'timestamp': timestamp,
+            'hash': hashlib.sha256(f"mock-{timestamp}".encode()).hexdigest(),
+            'previous_hash': "0000000000000000000000000000000000000000000000000000000000000000",
+            'transactions': []
+        }
+        
+        # Create a mock block object
+        class MockBlock:
+            def __init__(self, data):
+                self.__dict__.update(data)
+                
+            def to_dict(self):
+                return self.__dict__
+                
+        return MockBlock(mock_block)
+        
+    def notify_listeners(self, event_type, data):
+        """Notify all listeners of an event - for testing"""
+        if event_type in self.listeners:
+            for callback in self.listeners[event_type]:
+                try:
+                    import asyncio
+                    asyncio.create_task(callback(data))
+                except Exception as e:
+                    logger.error(f"Error in dummy blockchain notification: {e}")
 
 def shutdown_blockchain():
     """Shut down the blockchain service cleanly"""
@@ -207,12 +254,12 @@ def shutdown_blockchain():
         
     if _event_loop and not _event_loop.is_closed():
         # Schedule shutdown in the event loop
+        future = asyncio.run_coroutine_threadsafe(
+            _blockchain_instance.shutdown(),
+            _event_loop
+        )
+        
         try:
-            future = asyncio.run_coroutine_threadsafe(
-                _blockchain_instance.shutdown(),
-                _event_loop
-            )
-            
             # Wait for shutdown to complete
             future.result(timeout=10)
             
@@ -222,5 +269,3 @@ def shutdown_blockchain():
             logger.info("Blockchain service shut down successfully")
         except Exception as e:
             logger.error(f"Error shutting down blockchain: {e}")
-    else:
-        logger.info("Event loop already closed, cannot shut down blockchain properly")

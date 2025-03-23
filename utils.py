@@ -78,21 +78,35 @@ def generate_node_keypair() -> Tuple[str, str]:
     public_key = private_key.get_verifying_key()
     return private_key.to_string().hex(), public_key.to_string().hex()
 
-def load_config(config_file: str = "config.json") -> Dict[str, Any]:
-    """Load and validate configuration from a YAML file."""
+def load_config(config_file: str = "config.yaml") -> Dict[str, Any]:
+    """Load configuration from file with environment variable overrides."""
     default_config = {
         "difficulty": 4,
         "current_reward": 50.0,
         "halving_interval": 210000,
         "mempool_max_size": 1000,
         "max_retries": 3,
-        "sync_interval": 300
+        "sync_interval": 300,
+        "num_shards": 16  # Default to 16 shards
     }
+    
     try:
         with open(config_file, 'r') as f:
             config = yaml.safe_load(f) or {}
         for key, value in default_config.items():
             config.setdefault(key, value)
+            
+        # Override with environment variables if present
+        for key in config:
+            env_key = key.upper()
+            if env_key in os.environ:
+                # Try to convert to the same type as in the config
+                original_type = type(config[key])
+                if original_type == bool:
+                    config[key] = os.environ[env_key].lower() in ('true', 'yes', '1')
+                else:
+                    config[key] = original_type(os.environ[env_key])
+                    
         return config
     except FileNotFoundError:
         logger.warning(f"Config file {config_file} not found, using defaults")

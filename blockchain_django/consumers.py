@@ -40,23 +40,66 @@ class BlockConsumer(AsyncWebsocketConsumer):
         # Get blockchain instance
         blockchain = get_blockchain()
         
-        # Subscribe to new block events
-        if hasattr(blockchain, 'subscribe'):
+        # Check if blockchain is initialized and has subscribe method
+        if hasattr(blockchain, 'initialized') and blockchain.initialized and hasattr(blockchain, 'subscribe'):
             blockchain.subscribe("new_block", self.on_new_block)
-        else:
-            logger.error("Blockchain does not have subscribe method")
-            # Send error message to client
             await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': 'Blockchain service not fully initialized'
+                'type': 'status',
+                'message': 'Subscribed to blockchain updates'
             }))
+        else:
+            # Handle inactive or initializing blockchain case
+            logger.warning("Blockchain not fully initialized or missing subscribe method")
+            
+            # Try to add callback to listeners directly if available
+            if hasattr(blockchain, 'listeners') and isinstance(blockchain.listeners, dict):
+                if "new_block" not in blockchain.listeners:
+                    blockchain.listeners["new_block"] = []
+                blockchain.listeners["new_block"].append(self.on_new_block)
+                await self.send(text_data=json.dumps({
+                    'type': 'status',
+                    'message': 'Added to blockchain listeners (limited functionality)'
+                }))
+            else:
+                # Inform client of limited functionality
+                await self.send(text_data=json.dumps({
+                    'type': 'warning',
+                    'message': 'Blockchain service not fully initialized. Some features may be unavailable.'
+                }))
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard("blocks", self.channel_name)
+        
+        # Try to unsubscribe if possible
+        try:
+            blockchain = get_blockchain()
+            if hasattr(blockchain, 'initialized') and blockchain.initialized and hasattr(blockchain, 'unsubscribe'):
+                blockchain.unsubscribe("new_block", self.on_new_block)
+        except Exception as e:
+            logger.error(f"Error in disconnect: {e}")
 
     async def on_new_block(self, block):
         try:
-            block_dict = block.to_dict() if hasattr(block, 'to_dict') else {'error': 'Invalid block format'}
+            # Handle different block formats
+            if hasattr(block, 'to_dict') and callable(getattr(block, 'to_dict')):
+                try:
+                    block_dict = block.to_dict()
+                except Exception as e:
+                    logger.error(f"Error in block.to_dict(): {e}")
+                    block_dict = {
+                        'index': getattr(block, 'index', 'unknown'),
+                        'error': 'Could not convert block to dictionary'
+                    }
+            else:
+                # If block is already a dict or has another format
+                block_dict = {'error': 'Invalid block format'}
+                
+                # Try to extract some basic info
+                if hasattr(block, 'index'):
+                    block_dict['index'] = block.index
+                if hasattr(block, 'hash'):
+                    block_dict['hash'] = block.hash
+                    
             await self.send(text_data=json.dumps({
                 "type": "new_block",
                 "block": block_dict

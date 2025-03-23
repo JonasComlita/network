@@ -1,6 +1,8 @@
+// Updated App.js with integrated registration and wallet creation
 import React, { useState, useEffect } from 'react';
 import BlockchainChart from './components/BlockchainChart';
-import Register from './components/Register';
+import Register from './components/Register';  // Our enhanced Register component
+import RegistrationSuccess from './components/RegistrationSuccess'; // Fixed component without router dependency
 import Login from './components/Login';
 import UserProfile from './components/UserProfile';
 import UserWallet from './components/UserWallet';
@@ -12,7 +14,6 @@ import AdvancedAnalytics from './components/AdvancedAnalytics';
 import UserDashboard from './components/UserDashboard';
 import HistoricalTransactionData from './components/HistoricalTransactionData';
 import SentimentData from './components/SentimentData';
-// Remove unused import: TokenDebug
 import BlockchainDashboardIntegration from './components/BlockchainDashboardIntegration';
 import { useBlockchain } from './hooks/useBlockchain';
 import './App.css';
@@ -23,6 +24,9 @@ function App() {
   const [activeTab, setActiveTab] = useState('wallet'); // Set wallet as the default tab
   // State for toggling between standard and dashboard views
   const [useDashboardView, setUseDashboardView] = useState(false);
+  // Registration success state
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [registrationData, setRegistrationData] = useState(null);
 
   // Fetch blockchain data with the custom hook (will be available in components)
   const blockchainData = useBlockchain();
@@ -35,12 +39,37 @@ function App() {
     } else {
       localStorage.removeItem('token');
       console.log('Token removed from localStorage');
+      // Reset registration success state when logging out
+      setRegistrationSuccess(false);
     }
   }, [token]);
 
   // Function to handle logout
   const handleLogout = () => {
     setToken(null);
+  };
+
+  // Function to handle successful registration
+  const handleRegistrationSuccess = (data) => {
+    setRegistrationSuccess(true);
+    setRegistrationData(data);
+  };
+
+  // Functions for registration success navigation
+  const handleGoToLogin = () => {
+    setRegistrationSuccess(false);
+  };
+
+  const handleGoToWallet = () => {
+    setRegistrationSuccess(false);
+    setToken(localStorage.getItem('token')); // In case token was set externally
+    setActiveTab('wallet');
+  };
+
+  const handleGoToProfile = () => {
+    setRegistrationSuccess(false);
+    setToken(localStorage.getItem('token')); // In case token was set externally
+    setActiveTab('profile');
   };
 
   // Navigation tabs
@@ -92,10 +121,21 @@ function App() {
 
       <main className="container mx-auto p-4">
         {!token ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 my-8">
-            <Login setToken={setToken} />
-            <Register />
-          </div>
+          registrationSuccess ? (
+            // Show registration success message
+            <RegistrationSuccess 
+              registrationData={registrationData} 
+              onLogin={handleGoToLogin}
+              onViewWallet={handleGoToWallet}
+              onViewProfile={handleGoToProfile}
+            />
+          ) : (
+            // Show login and registration forms
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 my-8">
+              <Login setToken={setToken} />
+              <Register onSuccess={handleRegistrationSuccess} />
+            </div>
+          )
         ) : useDashboardView ? (
           // Integrated Dashboard View
           <BlockchainDashboardIntegration blockchainData={blockchainData} token={token} />
@@ -158,7 +198,7 @@ function App() {
               {activeTab === 'blockchain' && (
                 <>
                   <BlockchainChart 
-                    blockchainData={blockchainData} // Pass blockchain data from hook
+                    blockchainData={blockchainData}
                   />
                   <div className="mt-6">
                     <NotificationList token={token} />

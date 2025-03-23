@@ -3,7 +3,6 @@ from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Block, BlockchainTransaction, CustomUser, Notification, HistoricalData
 from .serializers import BlockSerializer, TransactionSerializer, UserSerializer, NotificationSerializer, HistoricalDataSerializer
-from django.contrib.auth.models import User
 from rest_framework import permissions
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework import generics
@@ -12,13 +11,12 @@ from rest_framework import status
 from rest_framework.views import APIView
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
-from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
-from rest_framework.authentication import TokenAuthentication, SessionAuthentication
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.authentication import SessionAuthentication
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from .services import fetch_external_block_data, fetch_price_data, fetch_market_data, fetch_news_data, fetch_sentiment_data
 from django.db.models import Sum
 from django_filters import rest_framework as filters
-from django.db.models import Count
 from django.utils import timezone
 from datetime import timedelta
 from django.db import connection
@@ -29,8 +27,9 @@ import logging
 import asyncio
 import threading
 from blockchain_django.blockchain_service import get_blockchain
-from rest_framework.decorators import api_view, permission_classes
+import concurrent.futures
 logger = logging.getLogger(__name__)
+
 
 blockchain_instance = Blockchain()
 
@@ -131,66 +130,127 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = UserSerializer
 
     def create(self, request, *args, **kwargs):
-        logger.info(f"Registration request data: {request.data}")
+        """
+        Enhanced user registration with integrated wallet creation.
+        
+        This method:
+        1. Validates the user data
+        2. Creates the user account
+        3. Attempts to create a blockchain wallet
+        4. Associates the wallet with the user if successful
+        5. Provides appropriate error handling and feedback
+        """
+        logger.info(f"Registration request received")
+        
+        # Step 1: Validate input data
         serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            user.is_admin = request.data.get('is_admin', False)
-            user.is_miner = request.data.get('is_miner', False)
-
-            wallet_passphrase = request.data.get('wallet_passphrase')
-            if not wallet_passphrase:
-                logger.error("Missing wallet passphrase")
-                return Response({"error": "Wallet passphrase is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-            try:
-                blockchain = get_blockchain()
-                if not blockchain or not getattr(blockchain, 'initialized', False):
-                    logger.error("Blockchain not initialized")
-                    user.delete()
-                    return Response(
-                        {"error": "Blockchain service not available"},
-                        status=status.HTTP_503_SERVICE_UNAVAILABLE
-                    )
-
-                wallet_address = self.create_user_wallet(user, blockchain, wallet_passphrase)
-                if wallet_address:
-                    user.wallet_address = wallet_address
-                    user.is_wallet_active = True
-                    user.wallet_created_at = timezone.now()
-                    user.save()
-                    logger.info(f"User {user.username} registered with wallet {wallet_address}")
-                    return Response(serializer.data, status=status.HTTP_201_CREATED)
-                else:
-                    logger.error("Wallet creation returned None")
-                    user.delete()
-                    return Response({"error": "Failed to create wallet"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            except Exception as e:
-                logger.error(f"Wallet creation failed: {str(e)}")
-                user.delete()
-                return Response({"error": f"Failed to create wallet: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        else:
-            logger.error(f"Serializer validation failed: {serializer.errors}")
+        if not serializer.is_valid():
+            logger.error(f"Validation failed: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Step 2: Validate wallet passphrase
+        wallet_passphrase = request.data.get('wallet_passphrase')
+        if not wallet_passphrase:
+            logger.error("Missing wallet passphrase")
+            return Response(
+                {"error": "Wallet passphrase is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if len(wallet_passphrase) < 8:
+            logger.error("Wallet passphrase too short")
+            return Response(
+                {"error": "Wallet passphrase must be at least 8 characters long"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Step 3: Create user account
+        user = serializer.save()
+        user.is_admin = request.data.get('is_admin', False)
+        user.is_miner = request.data.get('is_miner', False)
+        user.wallet_created_at = timezone.now()  # Set creation time even before wallet is created
+        user.save()
+        
+        # Step 4: Create user wallet
+        try:
+            # Get blockchain instance
+            blockchain = get_blockchain()
+            if not blockchain or not getattr(blockchain, 'initialized', False):
+                logger.warning("Blockchain not initialized, setting wallet as pending")
+                user.wallet_address = f"temp_{user.id}"  # Temporary wallet address
+                user.is_wallet_active = False
+                user.save()
+                
+                # Return success but indicate wallet is pending
+                response_data = serializer.data
+                response_data['wallet_status'] = 'pending'
+                response_data['message'] = 'User created successfully, but blockchain service is unavailable. Wallet will be created when the service is available.'
+                return Response(response_data, status=status.HTTP_201_CREATED)
+
+            # Create wallet with improved error handling
+            wallet_address = self.create_user_wallet(user, blockchain, wallet_passphrase)
+            
+            if wallet_address:
+                # Wallet created successfully
+                user.wallet_address = wallet_address
+                user.is_wallet_active = True
+                user.save()
+                
+                logger.info(f"User {user.username} registered with wallet {wallet_address}")
+                response_data = serializer.data
+                response_data['wallet_status'] = 'active'
+                return Response(response_data, status=status.HTTP_201_CREATED)
+            else:
+                # Wallet creation failed but user account is still created
+                user.wallet_address = f"temp_{user.id}"  # Temporary wallet address
+                user.is_wallet_active = False
+                user.save()
+                
+                response_data = serializer.data
+                response_data['wallet_status'] = 'pending'
+                response_data['message'] = 'User created successfully, but wallet creation failed. Please try creating a wallet later from your profile.'
+                return Response(response_data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            logger.error(f"Wallet creation error: {str(e)}")
+            
+            # Instead of deleting the user, mark wallet as failed
+            user.wallet_address = f"temp_{user.id}"  # Temporary wallet address
+            user.is_wallet_active = False
+            user.save()
+            
+            response_data = serializer.data
+            response_data['wallet_status'] = 'error'
+            response_data['message'] = f'Account created successfully, but there was an error creating your wallet: {str(e)}'
+            return Response(response_data, status=status.HTTP_201_CREATED)
 
     def create_user_wallet(self, user, blockchain, wallet_passphrase):
-        def run_wallet_creation():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                address = loop.run_until_complete(blockchain.create_wallet(user_id=str(user.id), wallet_passphrase=wallet_passphrase))
-                loop.close()
-                threading.current_thread().result = address
-                return address
-            except Exception as e:
-                logger.error(f"Error in wallet creation thread: {e}")
+        """
+        Create a blockchain wallet for the user with improved error handling.
+        
+        Returns wallet address if successful, None otherwise.
+        """
+        try:
+            # Import our helper
+            from fix_asyncio import run_async
+            
+            # Create wallet with run_async
+            logger.info(f"Creating wallet for user {user.id} with fixed method")
+            wallet_address = run_async(
+                blockchain.create_wallet(
+                    user_id=str(user.id), 
+                    wallet_passphrase=wallet_passphrase
+                )
+            )
+            
+            if not wallet_address:
+                logger.error(f"Wallet creation returned None for user {user.id}")
                 return None
-
-        thread = threading.Thread(target=run_wallet_creation)
-        thread.start()
-        thread.join(timeout=10)
-        return getattr(thread, 'result', None) if hasattr(thread, 'result') else run_wallet_creation()
+                
+            return wallet_address
+        except Exception as e:
+            logger.error(f"Error creating wallet for user {user.id}: {str(e)}")
+            return None
         
 # blockchain_django/views.py
 from rest_framework_simplejwt.views import TokenObtainPairView

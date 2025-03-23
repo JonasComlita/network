@@ -6,5 +6,6 @@
   "max_retries": 3,
   "sync_interval": 300,
   "use_gpu": false,
-  "mining_workers": 2
+  "mining_workers": 2,
+  "num_shards": 16
 }

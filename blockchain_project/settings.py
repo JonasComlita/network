@@ -115,7 +115,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'blockchain',  # Name of your blockchain database
         'USER': 'postgres',   # Your PostgreSQL username
-        'PASSWORD': '+Pw=fku123!',  # Your PostgreSQL password
+        'PASSWORD': 'postgres',  # Your PostgreSQL password
         'HOST': 'localhost',  # or the IP address of your PostgreSQL server
         'PORT': '5432',  # Default PostgreSQL port
     }

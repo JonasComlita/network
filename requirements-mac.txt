@@ -25,7 +25,7 @@ resource
 msgpack>=1.0.5
 setuptools
 cmake
-
+pybloomfiltermmap3
 # Testing & Development - macOS-specific versions
 pytest>=7.3.1
 pytest-asyncio>=0.25.0
