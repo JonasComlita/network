@@ -3,7 +3,7 @@ import BlockchainChart from './components/BlockchainChart';
 import Register from './components/Register';
 import Login from './components/Login';
 import UserProfile from './components/UserProfile';
-import UserWallet from './components/UserWallet'; // Import the new wallet component
+import UserWallet from './components/UserWallet';
 import TransactionAnalytics from './components/TransactionAnalytics';
 import PriceData from './components/PriceData';
 import NotificationList from './components/NotificationList';
@@ -12,13 +12,20 @@ import AdvancedAnalytics from './components/AdvancedAnalytics';
 import UserDashboard from './components/UserDashboard';
 import HistoricalTransactionData from './components/HistoricalTransactionData';
 import SentimentData from './components/SentimentData';
-import TokenDebug from './components/TokenDebug';
+// Remove unused import: TokenDebug
+import BlockchainDashboardIntegration from './components/BlockchainDashboardIntegration';
+import { useBlockchain } from './hooks/useBlockchain';
 import './App.css';
 
 function App() {
   // Initialize token from localStorage
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [activeTab, setActiveTab] = useState('wallet'); // Set wallet as the default tab
+  // State for toggling between standard and dashboard views
+  const [useDashboardView, setUseDashboardView] = useState(false);
+
+  // Fetch blockchain data with the custom hook (will be available in components)
+  const blockchainData = useBlockchain();
 
   // Effect to update localStorage when token changes
   useEffect(() => {
@@ -51,12 +58,34 @@ function App() {
         <div className="container mx-auto flex justify-between items-center">
           <h1 className="text-3xl font-bold">OriginalCoin</h1>
           {token && (
-            <button 
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-            >
-              Logout
-            </button>
+            <div className="flex items-center space-x-4">
+              {/* Toggle for Dashboard View */}
+              <div className="flex items-center">
+                <label className="mr-2 text-sm">Dashboard View:</label>
+                <div 
+                  className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in cursor-pointer"
+                  onClick={() => setUseDashboardView(!useDashboardView)}
+                >
+                  <input 
+                    type="checkbox" 
+                    name="toggle-dashboard" 
+                    id="toggle-dashboard" 
+                    checked={useDashboardView}
+                    onChange={() => {}}
+                    className="sr-only"
+                  />
+                  <div className={`block w-10 h-6 rounded-full ${useDashboardView ? 'bg-green-400' : 'bg-gray-600'}`}></div>
+                  <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition ${useDashboardView ? 'transform translate-x-4' : ''}`}></div>
+                </div>
+              </div>
+              
+              <button 
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                Logout
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -67,9 +96,12 @@ function App() {
             <Login setToken={setToken} />
             <Register />
           </div>
+        ) : useDashboardView ? (
+          // Integrated Dashboard View
+          <BlockchainDashboardIntegration blockchainData={blockchainData} token={token} />
         ) : (
           <>
-            {/* Navigation Tabs */}
+            {/* Standard Tab Navigation */}
             <div className="border-b border-gray-200 mb-8">
               <nav className="flex space-x-8">
                 {tabs.map(tab => (
@@ -125,7 +157,9 @@ function App() {
               
               {activeTab === 'blockchain' && (
                 <>
-                  <BlockchainChart />
+                  <BlockchainChart 
+                    blockchainData={blockchainData} // Pass blockchain data from hook
+                  />
                   <div className="mt-6">
                     <NotificationList token={token} />
                   </div>

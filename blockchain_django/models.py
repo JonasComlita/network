@@ -6,17 +6,17 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from blockchain.blockchain import Blockchain
-from blockchain.transaction import Transaction as BlockchainTransactionClass
+# Don't import blockchain here to avoid conflicts
+# from blockchain.blockchain import Blockchain
+# from blockchain.transaction import Transaction as BlockchainTransactionClass
 from utils import SecurityUtils
 import logging
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Create your models here.
-# Initialize your blockchain instance
-blockchain_instance = Blockchain()
+# REMOVED: Don't create blockchain instance here
+# blockchain_instance = Blockchain()
     
 class BlockchainNode(models.Model):
     node_id = models.CharField(max_length=100, unique=True)
@@ -100,11 +100,13 @@ class CustomUser(AbstractUser):
         
     async def update_wallet_balance(self):
         """Update wallet balance from blockchain"""
-        from blockchain.blockchain import Blockchain
+        # Import blockchain only when needed
+        from blockchain_django.blockchain_service import get_blockchain
+        
         if self.wallet_address:
             try:
-                blockchain = Blockchain()
-                if not blockchain.initialized:
+                blockchain = get_blockchain()
+                if hasattr(blockchain, 'initialized') and not blockchain.initialized:
                     await blockchain.initialize()
                 balance = await blockchain.get_balance(self.wallet_address)
                 self.wallet_balance = balance
@@ -164,4 +166,3 @@ class UserAnalytics(models.Model):
     total_transactions = models.IntegerField()
     total_amount = models.FloatField()
     # Add any other fields you need
-

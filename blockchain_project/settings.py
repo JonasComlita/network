@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -55,9 +56,10 @@ BLOCKCHAIN_CONFIG = {
     'p2p_port': 8333,
     'mining_interval': 600,  # Target block time in seconds (10 minutes)
     'data_dir': 'blockchain_data',
+    'block_time': 2.0,  # Target 2-second blocks for Visa-like speed
 }
 
-from datetime import timedelta
+# JWT settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -76,13 +78,12 @@ SIMPLE_JWT = {
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
 ]
 
 ROOT_URLCONF = "blockchain_project.urls"
@@ -104,21 +105,21 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "blockchain_project.wsgi.application"
-
+ASGI_APPLICATION = "blockchain_project.asgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-       'default': {
-           'ENGINE': 'django.db.backends.postgresql',
-           'NAME': 'blockchain',  # Name of your blockchain database
-           'USER': 'postgres',   # Your PostgreSQL username
-           'PASSWORD': '+Pw=fku123!',  # Your PostgreSQL password
-           'HOST': 'localhost',  # or the IP address of your PostgreSQL server
-           'PORT': '5432',  # Default PostgreSQL port
-       }
-   }
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'blockchain',  # Name of your blockchain database
+        'USER': 'postgres',   # Your PostgreSQL username
+        'PASSWORD': '+Pw=fku123!',  # Your PostgreSQL password
+        'HOST': 'localhost',  # or the IP address of your PostgreSQL server
+        'PORT': '5432',  # Default PostgreSQL port
+    }
+}
 
 
 # Password validation
@@ -162,6 +163,7 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,  # Set the number of items per page
@@ -180,21 +182,14 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.JSONParser',
     ],
     'DEFAULT_CONTENT_TYPE': 'application/json',
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-    ],
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ],
 }
 
-ASGI_APPLICATION = 'blockchain_project.asgi.application'
-
+# CORS settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Allow your React app
 ]
 
-
+# Channels settings
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
@@ -227,6 +222,16 @@ LOGGING = {
     'loggers': {
         'blockchain': {
             'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'channels': {
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': True,
         },

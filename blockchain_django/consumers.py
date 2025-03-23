@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from blockchain_django.blockchain_service import get_blockchain
+from blockchain.blockchain import Blockchain
 
 logger = logging.getLogger('django')
 User = get_user_model()
@@ -29,18 +30,43 @@ class BlockConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         await self.channel_layer.group_add("blocks", self.channel_name)
         await self.accept()
+        
+        # Send initial connection message
+        await self.send(text_data=json.dumps({
+            'type': 'connection_established',
+            'message': 'Connected to blocks WebSocket'
+        }))
+        
+        # Get blockchain instance
         blockchain = get_blockchain()
+        
         # Subscribe to new block events
-        blockchain.subscribe("new_block", self.on_new_block)
+        if hasattr(blockchain, 'subscribe'):
+            blockchain.subscribe("new_block", self.on_new_block)
+        else:
+            logger.error("Blockchain does not have subscribe method")
+            # Send error message to client
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Blockchain service not fully initialized'
+            }))
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard("blocks", self.channel_name)
 
     async def on_new_block(self, block):
-        await self.send(text_data=json.dumps({
-            "type": "new_block",
-            "block": block.to_dict()
-        }))
+        try:
+            block_dict = block.to_dict() if hasattr(block, 'to_dict') else {'error': 'Invalid block format'}
+            await self.send(text_data=json.dumps({
+                "type": "new_block",
+                "block": block_dict
+            }))
+        except Exception as e:
+            logger.error(f"Error sending block update: {e}")
+            await self.send(text_data=json.dumps({
+                "type": "error",
+                "message": f"Error processing block update: {str(e)}"
+            }))
 
     async def send_block_update(self, event):
         await self.send(text_data=json.dumps(event))

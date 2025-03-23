@@ -114,11 +114,49 @@ const fetchWithRetry = async (requestFn, maxRetries = 3, delay = 1000) => {
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      // Check if token exists before making the request
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        throw new Error('Authentication token is missing');
+      }
+      
       return await requestFn();
     } catch (error) {
       lastError = error;
       
-      // Don't retry on client errors (4xx) except for 429 (rate limiting) and 408 (timeout)
+      // Handle 401 errors with token refresh
+      if (error.response && error.response.status === 401) {
+        try {
+          // Try to refresh the token
+          const refreshToken = localStorage.getItem('refresh_token');
+          if (refreshToken) {
+            const refreshResponse = await axios.post(`${BASE_URL}/token/refresh/`, {
+              refresh: refreshToken
+            });
+            
+            if (refreshResponse.data.access) {
+              // Update token
+              localStorage.setItem('token', refreshResponse.data.access);
+              console.log('Token refreshed successfully');
+              
+              // Try the request again with the new token
+              continue;
+            }
+          }
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
+          // Clear tokens on refresh failure
+          localStorage.removeItem('token');
+          localStorage.removeItem('refresh_token');
+          
+          // Redirect to login
+          window.location.href = '/login';
+          throw new Error('Session expired. Please log in again.');
+        }
+      }
+      
+      // Don't retry on client errors (4xx) except for 401 (already handled), 429 (rate limiting) and 408 (timeout)
       if (error.response && 
           error.response.status >= 400 && 
           error.response.status < 500 && 
@@ -251,12 +289,189 @@ const apiService = {
     const timestamp = new Date().getTime();
     const token = localStorage.getItem('token');
     
-    // Ensure endpoints match the routes defined in routing.py
-    let wsEndpoint = endpoint;
-    
-    // Add token to WebSocket connection for authentication
-    return new WebSocket(`${protocol}//${host}:${port}/ws/${wsEndpoint}/?token=${token}&t=${timestamp}`);
+     // Clean the endpoint to avoid double slashes
+  const cleanEndpoint = endpoint.replace(/^\/|\/$/g, '');
+  
+  // Ensure endpoints match the routes defined in routing.py
+  return new WebSocket(`${protocol}//${host}:${port}/ws/${cleanEndpoint}/?token=${token}&t=${timestamp}`);
   }
+};
+
+apiService.wallet = {
+  ...apiService.wallet, // Keep existing methods
+  
+  // Enhanced wallet info method with passphrase support
+  getInfo: (walletPassphrase = null) => {
+    let url = '/wallet/info/';
+    if (walletPassphrase) {
+      url += `?wallet_passphrase=${encodeURIComponent(walletPassphrase)}`;
+    }
+    return apiService.fetchWithRetry(() => apiService.api.get(url));
+  },
+  
+  // Enhanced wallet creation with passphrase support
+  create: (walletPassphrase = null) => {
+    const data = walletPassphrase ? { wallet_passphrase: walletPassphrase } : {};
+    return apiService.fetchWithRetry(() => apiService.api.post('/wallet/create/', data));
+  },
+  
+  // Enhanced send transaction with passphrase and optional fee
+  send: (recipient, amount, memo = '', walletPassphrase = null, fee = null) => {
+    const data = { recipient, amount, memo };
+    
+    if (walletPassphrase) {
+      data.wallet_passphrase = walletPassphrase;
+    }
+    
+    if (fee !== null) {
+      data.fee = fee;
+    }
+    
+    return apiService.fetchWithRetry(() => apiService.api.post('/wallet/send/', data));
+  },
+  
+  // Add backup wallet method
+  backup: (walletPassphrase) => {
+    return apiService.fetchWithRetry(() => 
+      apiService.api.post('/wallet/backup/', { wallet_passphrase: walletPassphrase }));
+  },
+  
+  // Add restore wallet method
+  restore: (backupData, walletPassphrase) => {
+    return apiService.fetchWithRetry(() => 
+      apiService.api.post('/wallet/restore/', { 
+        backup_data: backupData, 
+        wallet_passphrase: walletPassphrase 
+      }));
+  },
+  
+  // Get transaction status
+  getTransactionStatus: (txId) => {
+    return apiService.fetchWithRetry(() => 
+      apiService.api.get(`/wallet/transaction/${txId}/status/`));
+  }
+};
+
+// Extended blockchain analytics methods
+apiService.blockchain = {
+  // Get blockchain overview stats
+  getOverview: () => 
+    apiService.fetchWithRetry(() => apiService.api.get('/blockchain/overview/')),
+  
+  // Get detailed block information
+  getBlock: (blockId) => 
+    apiService.fetchWithRetry(() => apiService.api.get(`/blockchain/block/${blockId}/`)),
+  
+  // Get transactions for a specific block
+  getBlockTransactions: (blockId) => 
+    apiService.fetchWithRetry(() => apiService.api.get(`/blockchain/block/${blockId}/transactions/`)),
+  
+  // Get mining statistics
+  getMiningStats: () => 
+    apiService.fetchWithRetry(() => apiService.api.get('/blockchain/mining/stats/')),
+  
+  // Get blockchain transaction volume over time
+  getTransactionVolume: (timeframe = 'week') => 
+    apiService.fetchWithRetry(() => apiService.api.get(`/blockchain/analytics/volume/?timeframe=${timeframe}`)),
+  
+  // Get blockchain health metrics
+  getHealthMetrics: () => 
+    apiService.fetchWithRetry(() => apiService.api.get('/blockchain/health/')),
+  
+  // Get node info
+  getNodeInfo: () => 
+    apiService.fetchWithRetry(() => apiService.api.get('/blockchain/node/')),
+  
+  // Search the blockchain (blocks, transactions, addresses)
+  search: (query) => 
+    apiService.fetchWithRetry(() => apiService.api.get(`/blockchain/search/?q=${encodeURIComponent(query)}`))
+};
+
+// Enhanced WebSocket manager with reconnection logic
+apiService.createWebSocketWithReconnect = (endpoint, options = {}) => {
+  const {
+    onOpen,
+    onMessage,
+    onError,
+    onClose,
+    maxReconnectAttempts = 10,
+    reconnectInterval = 1000,
+    maxReconnectInterval = 30000,
+    reconnectDecay = 1.5
+  } = options;
+  
+  // Create standard WebSocket
+  const ws = apiService.createWebSocketConnection(endpoint);
+  
+  let reconnectAttempts = 0;
+  let reconnectTimer = null;
+  let forceClosed = false;
+  
+  // Calculate reconnect delay with exponential backoff
+  const getReconnectDelay = () => {
+    return Math.min(
+      reconnectInterval * Math.pow(reconnectDecay, reconnectAttempts),
+      maxReconnectInterval
+    );
+  };
+  
+  // Function to reconnect
+  const reconnect = () => {
+    if (forceClosed || reconnectAttempts >= maxReconnectAttempts) {
+      console.log(
+        forceClosed 
+          ? 'WebSocket was manually closed, not reconnecting' 
+          : 'Maximum reconnect attempts reached'
+      );
+      return;
+    }
+    
+    reconnectAttempts++;
+    const delay = getReconnectDelay();
+    
+    console.log(`WebSocket reconnecting in ${Math.round(delay / 1000)}s... (Attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+    
+    reconnectTimer = setTimeout(() => {
+      const newWs = apiService.createWebSocketConnection(endpoint);
+      
+      // Copy event handlers to new WebSocket
+      if (onOpen) newWs.onopen = onOpen;
+      if (onMessage) newWs.onmessage = onMessage;
+      if (onError) newWs.onerror = onError;
+      if (onClose) newWs.onclose = handleClose;
+      
+      Object.assign(ws, newWs);
+    }, delay);
+  };
+  
+  // Handle close event and reconnect if needed
+  const handleClose = (event) => {
+    if (onClose) onClose(event);
+    
+    // Only reconnect for abnormal closures
+    const shouldReconnect = !forceClosed && 
+                           event.code !== 1000 && // Normal closure
+                           event.code !== 1001;   // Going away
+    
+    if (shouldReconnect) {
+      reconnect();
+    }
+  };
+  
+  // Set up event handlers
+  if (onOpen) ws.onopen = onOpen;
+  if (onMessage) ws.onmessage = onMessage;
+  if (onError) ws.onerror = onError;
+  ws.onclose = handleClose;
+  
+  // Add custom methods to WebSocket
+  ws.forceClose = () => {
+    forceClosed = true;
+    clearTimeout(reconnectTimer);
+    ws.close();
+  };
+  
+  return ws;
 };
 
 export default apiService;

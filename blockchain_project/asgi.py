@@ -17,11 +17,11 @@ django.setup()
 # Import other modules after Django is set up
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
-from blockchain_django.routing import websocket_urlpatterns
 from channels.layers import get_channel_layer
 
 # Import the middleware after Django setup
 from blockchain_django.middleware import TokenAuthMiddlewareStack
+from blockchain_django.routing import websocket_urlpatterns
 
 # Get ASGI application
 django_asgi_app = get_asgi_application()
@@ -31,12 +31,15 @@ channel_layer = get_channel_layer()
 
 # Initialize blockchain in a separate function
 async def init_blockchain():
-    from blockchain_django.background_service import blockchain_service
-    await blockchain_service.initialize_blockchain()
+    from blockchain_django.blockchain_service import get_blockchain, initialize_blockchain
+    await initialize_blockchain()
 
 # Define the application
 application = ProtocolTypeRouter({
+    # HTTP requests are handled by the standard Django ASGI application
     "http": django_asgi_app,
+    
+    # WebSocket handling with authentication and security
     "websocket": TokenAuthMiddlewareStack(
         URLRouter(websocket_urlpatterns)
     ),
