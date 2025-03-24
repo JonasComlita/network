@@ -10,8 +10,6 @@ from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.conf import settings
 from urllib.parse import parse_qs
-import jwt
-from jwt import InvalidTokenError
 
 @database_sync_to_async
 def get_user_from_token(token_key):

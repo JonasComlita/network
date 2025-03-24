@@ -25,7 +25,7 @@ import FeatureCards from './components/FeatureCards';
 
 import { useBlockchain } from './hooks/useBlockchain';
 import './App.css';
-import './futuristic.css'; // New futuristic styling
+import './futuristic.css';
 
 function App() {
   // Initialize token from localStorage
@@ -143,7 +143,7 @@ function App() {
             <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-indigo-400 rounded-md mr-3 relative overflow-hidden">
               <div className="absolute top-1/4 left-1/4 w-1/2 h-1/2 bg-gray-800 rotate-45"></div>
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent">OriginalCoin</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent">NetWork</h1>
           </div>
           
           {token && (
@@ -338,7 +338,7 @@ function App() {
       
       <footer className="bg-gray-800/70 text-white p-4 mt-12 border-t border-gray-700 relative z-10">
         <div className="container mx-auto text-center">
-          <p className="text-gray-400">&copy; {new Date().getFullYear()} OriginalCoin Blockchain. All rights reserved.</p>
+          <p className="text-gray-400">&copy; {new Date().getFullYear()} NetWork: An open source blockchain.</p>
         </div>
       </footer>
     </div>

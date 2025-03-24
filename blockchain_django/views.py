@@ -1,8 +1,8 @@
 from django.shortcuts import render
 from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Block, BlockchainTransaction, CustomUser, Notification, HistoricalData
-from .serializers import BlockSerializer, TransactionSerializer, UserSerializer, NotificationSerializer, HistoricalDataSerializer
+from blockchain_django.models import Block, BlockchainTransaction, CustomUser, Notification, HistoricalData
+from blockchain_django.serializers import BlockSerializer, TransactionSerializer, UserSerializer, NotificationSerializer, HistoricalDataSerializer
 from rest_framework import permissions
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework import generics
@@ -14,7 +14,7 @@ from asgiref.sync import async_to_sync
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authentication import SessionAuthentication
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from .services import fetch_external_block_data, fetch_price_data, fetch_market_data, fetch_news_data, fetch_sentiment_data
+from blockchain_django.services import fetch_external_block_data, fetch_price_data, fetch_market_data, fetch_news_data, fetch_sentiment_data
 from django.db.models import Sum
 from django_filters import rest_framework as filters
 from django.utils import timezone
@@ -324,8 +324,8 @@ class TransactionAnalyticsView(generics.GenericAPIView):
         print(f"User authenticated: {request.user.is_authenticated}")
         print(f"User: {request.user}")
         
-        total_transactions = Transaction.objects.count()
-        total_amount = Transaction.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+        total_transactions = BlockchainTransaction.objects.count()
+        total_amount = BlockchainTransaction.objects.aggregate(Sum('amount'))['amount__sum'] or 0
         average_amount = total_amount / total_transactions if total_transactions > 0 else 0
 
         return Response({
@@ -369,11 +369,11 @@ class AdvancedAnalyticsView(generics.GenericAPIView):
 
     def get(self, request):
         user = request.user
-        total_transactions = Transaction.objects.count()
-        total_amount = Transaction.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+        total_transactions = BlockchainTransaction.objects.count()
+        total_amount = BlockchainTransaction.objects.aggregate(Sum('amount'))['amount__sum'] or 0
         average_amount = total_amount / total_transactions if total_transactions > 0 else 0
 
-        user_transactions = Transaction.objects.filter(sender=user.username)  # Assuming sender is the username
+        user_transactions = BlockchainTransaction.objects.filter(sender=user.username)  # Assuming sender is the username
         user_total_amount = user_transactions.aggregate(Sum('amount'))['amount__sum'] or 0
         user_average_amount = user_total_amount / user_transactions.count() if user_transactions.count() > 0 else 0
 
@@ -397,7 +397,7 @@ class UserDashboardView(generics.GenericAPIView):
 
     def get(self, request):
         user = request.user
-        transactions = Transaction.objects.filter(sender=user.username)  # Assuming sender is the username
+        transactions = BlockchainTransaction.objects.filter(sender=user.username)  # Assuming sender is the username
         total_transactions = transactions.count()
         total_amount = transactions.aggregate(Sum('amount'))['amount__sum'] or 0
 
@@ -431,7 +431,7 @@ class HistoricalTransactionDataView(generics.GenericAPIView):
         end_date = timezone.now()
         start_date = end_date - timedelta(days=30)  # Last 30 days
 
-        transactions = Transaction.objects.filter(created_at__range=(start_date, end_date))
+        transactions = BlockchainTransaction.objects.filter(created_at__range=(start_date, end_date))
         daily_data = transactions.values('created_at__date').annotate(total_amount=Sum('amount')).order_by('created_at__date')
 
         return Response(daily_data)
@@ -448,7 +448,7 @@ class UserAnalyticsView(generics.GenericAPIView):
 
     def get(self, request):
         user = request.user
-        transactions = Transaction.objects.filter(sender=user.username)  # Assuming sender is the username
+        transactions = BlockchainTransaction.objects.filter(sender=user.username)  # Assuming sender is the username
         total_transactions = transactions.count()
         total_amount = transactions.aggregate(Sum('amount'))['amount__sum'] or 0
         average_amount = total_amount / total_transactions if total_transactions > 0 else 0

@@ -353,7 +353,7 @@ const UserWallet = ({ token }) => {
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="text-sm text-blue-600 mb-1">Balance</div>
           <div className="text-2xl font-bold">
-            {walletInfo.balance ? parseFloat(walletInfo.balance).toFixed(8) : '0.00000000'} ORIG
+            {walletInfo && walletInfo.balance ? parseFloat(walletInfo.balance).toFixed(8) : '0.00000000'} ORIG
           </div>
         </div>
         

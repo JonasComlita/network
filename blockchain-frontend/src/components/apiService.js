@@ -272,15 +272,6 @@ const apiService = {
   // Dashboard data
   getDashboard: () => fetchWithRetry(() => api.get('/dashboard/')),
   
-  // Wallet methods
-  wallet: {
-    getInfo: () => fetchWithRetry(() => api.get('/wallet/info/')),
-    getHistory: () => fetchWithRetry(() => api.get('/wallet/history/')),
-    create: () => fetchWithRetry(() => api.post('/wallet/create/')),
-    send: (recipient, amount, memo = '') => 
-      fetchWithRetry(() => api.post('/wallet/send/', { recipient, amount, memo }))
-  },
-  
   // WebSocket helper with improved token handling
   createWebSocketConnection: (endpoint) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -289,102 +280,133 @@ const apiService = {
     const timestamp = new Date().getTime();
     const token = localStorage.getItem('token');
     
-     // Clean the endpoint to avoid double slashes
-  const cleanEndpoint = endpoint.replace(/^\/|\/$/g, '');
-  
-  // Ensure endpoints match the routes defined in routing.py
-  return new WebSocket(`${protocol}//${host}:${port}/ws/${cleanEndpoint}/?token=${token}&t=${timestamp}`);
-  }
-};
-
-apiService.wallet = {
-  ...apiService.wallet, // Keep existing methods
-  
-  // Enhanced wallet info method with passphrase support
-  getInfo: (walletPassphrase = null) => {
-    let url = '/wallet/info/';
-    if (walletPassphrase) {
-      url += `?wallet_passphrase=${encodeURIComponent(walletPassphrase)}`;
-    }
-    return apiService.fetchWithRetry(() => apiService.api.get(url));
-  },
-  
-  // Enhanced wallet creation with passphrase support
-  create: (walletPassphrase = null) => {
-    const data = walletPassphrase ? { wallet_passphrase: walletPassphrase } : {};
-    return apiService.fetchWithRetry(() => apiService.api.post('/wallet/create/', data));
-  },
-  
-  // Enhanced send transaction with passphrase and optional fee
-  send: (recipient, amount, memo = '', walletPassphrase = null, fee = null) => {
-    const data = { recipient, amount, memo };
+    // Clean the endpoint to avoid double slashes
+    const cleanEndpoint = endpoint.replace(/^\/|\/$/g, '');
     
-    if (walletPassphrase) {
-      data.wallet_passphrase = walletPassphrase;
-    }
-    
-    if (fee !== null) {
-      data.fee = fee;
-    }
-    
-    return apiService.fetchWithRetry(() => apiService.api.post('/wallet/send/', data));
+    // Ensure endpoints match the routes defined in routing.py
+    return new WebSocket(`${protocol}//${host}:${port}/ws/${cleanEndpoint}/?token=${token}&t=${timestamp}`);
   },
   
-  // Add backup wallet method
-  backup: (walletPassphrase) => {
-    return apiService.fetchWithRetry(() => 
-      apiService.api.post('/wallet/backup/', { wallet_passphrase: walletPassphrase }));
-  },
-  
-  // Add restore wallet method
-  restore: (backupData, walletPassphrase) => {
-    return apiService.fetchWithRetry(() => 
-      apiService.api.post('/wallet/restore/', { 
-        backup_data: backupData, 
+  // Wallet methods
+  wallet: {
+    // Get wallet info with passphrase support
+    getInfo: (walletPassphrase = null) => {
+      let url = '/wallet/info/';
+      if (walletPassphrase) {
+        url += `?wallet_passphrase=${encodeURIComponent(walletPassphrase)}`;
+      }
+      return fetchWithRetry(() => api.get(url));
+    },
+    
+    // Get wallet history
+    getHistory: () => 
+      fetchWithRetry(() => api.get('/wallet/history/')),
+    
+    // Create wallet with passphrase
+    create: (walletPassphrase = null) => {
+      const data = walletPassphrase ? { wallet_passphrase: walletPassphrase } : {};
+      return fetchWithRetry(() => api.post('/wallet/create/', data));
+    },
+    
+    // Send transaction
+    send: (recipient, amount, memo = '', walletPassphrase = null, fee = null) => {
+      const data = { recipient, amount, memo };
+      
+      if (walletPassphrase) {
+        data.wallet_passphrase = walletPassphrase;
+      }
+      
+      if (fee !== null) {
+        data.fee = fee;
+      }
+      
+      return fetchWithRetry(() => api.post('/wallet/send/', data));
+    },
+    
+    // Get wallet balance
+    getBalance: () => 
+      fetchWithRetry(() => api.get('/wallet/balance/')),
+    
+    // Get all wallets for the current user
+    getWallets: () => 
+      fetchWithRetry(() => api.get('/wallets/')),
+    
+    // Get a specific wallet
+    getWallet: (walletAddress) => 
+      fetchWithRetry(() => api.get(`/wallets/${walletAddress}/`)),
+    
+    // Set a wallet as primary
+    setPrimary: (walletAddress) => 
+      fetchWithRetry(() => api.patch(`/wallets/${walletAddress}/`, { is_primary: true })),
+    
+    // Get transaction history for a specific wallet
+    getWalletTransactions: (walletAddress, limit = 50) => 
+      fetchWithRetry(() => api.get(`/wallets/${walletAddress}/transactions/?limit=${limit}`)),
+    
+    // Create a new named wallet
+    createNamed: (walletName, walletPassphrase) => 
+      fetchWithRetry(() => api.post('/wallets/', { 
+        wallet_name: walletName, 
         wallet_passphrase: walletPassphrase 
-      }));
-  },
-  
-  // Get transaction status
-  getTransactionStatus: (txId) => {
-    return apiService.fetchWithRetry(() => 
-      apiService.api.get(`/wallet/transaction/${txId}/status/`));
+      })),
+    
+    // Send transaction from a specific wallet
+    sendFromWallet: (walletAddress, recipient, amount, memo = '', walletPassphrase, fee = null) => {
+      const data = { 
+        recipient, 
+        amount, 
+        memo, 
+        wallet_passphrase: walletPassphrase 
+      };
+      
+      if (fee !== null) {
+        data.fee = fee;
+      }
+      
+      return fetchWithRetry(() => api.post(`/wallets/${walletAddress}/send/`, data));
+    },
+    
+    // Backup a wallet
+    backupWallet: (walletAddress, walletPassphrase) => 
+      fetchWithRetry(() => api.post(`/wallets/${walletAddress}/backup/`, {
+        wallet_passphrase: walletPassphrase
+      }))
   }
 };
 
-// Extended blockchain analytics methods
+// Blockchain analytics methods
 apiService.blockchain = {
   // Get blockchain overview stats
   getOverview: () => 
-    apiService.fetchWithRetry(() => apiService.api.get('/blockchain/overview/')),
+    fetchWithRetry(() => api.get('/blockchain/overview/')),
   
   // Get detailed block information
   getBlock: (blockId) => 
-    apiService.fetchWithRetry(() => apiService.api.get(`/blockchain/block/${blockId}/`)),
+    fetchWithRetry(() => api.get(`/blockchain/block/${blockId}/`)),
   
   // Get transactions for a specific block
   getBlockTransactions: (blockId) => 
-    apiService.fetchWithRetry(() => apiService.api.get(`/blockchain/block/${blockId}/transactions/`)),
+    fetchWithRetry(() => api.get(`/blockchain/block/${blockId}/transactions/`)),
   
   // Get mining statistics
   getMiningStats: () => 
-    apiService.fetchWithRetry(() => apiService.api.get('/blockchain/mining/stats/')),
+    fetchWithRetry(() => api.get('/blockchain/mining/stats/')),
   
   // Get blockchain transaction volume over time
   getTransactionVolume: (timeframe = 'week') => 
-    apiService.fetchWithRetry(() => apiService.api.get(`/blockchain/analytics/volume/?timeframe=${timeframe}`)),
+    fetchWithRetry(() => api.get(`/blockchain/analytics/volume/?timeframe=${timeframe}`)),
   
   // Get blockchain health metrics
   getHealthMetrics: () => 
-    apiService.fetchWithRetry(() => apiService.api.get('/blockchain/health/')),
+    fetchWithRetry(() => api.get('/blockchain/health/')),
   
   // Get node info
   getNodeInfo: () => 
-    apiService.fetchWithRetry(() => apiService.api.get('/blockchain/node/')),
+    fetchWithRetry(() => api.get('/blockchain/node/')),
   
   // Search the blockchain (blocks, transactions, addresses)
   search: (query) => 
-    apiService.fetchWithRetry(() => apiService.api.get(`/blockchain/search/?q=${encodeURIComponent(query)}`))
+    fetchWithRetry(() => api.get(`/blockchain/search/?q=${encodeURIComponent(query)}`))
 };
 
 // Enhanced WebSocket manager with reconnection logic

@@ -1,0 +1,88 @@
+<!-- templates/emails/verify_email.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Verify Your Email Address</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .header {
+            background-color: #3b82f6;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            border-radius: 5px 5px 0 0;
+            margin-bottom: 20px;
+        }
+        .footer {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            margin-top: 30px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #3b82f6;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .button:hover {
+            background-color: #2563eb;
+        }
+        .verification-link {
+            word-break: break-all;
+            margin: 15px 0;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Verify Your Email Address</h2>
+        </div>
+        
+        <p>Hello {{ username }},</p>
+        
+        <p>Thank you for registering with our blockchain platform. To complete your registration and verify your email address, please click the button below:</p>
+        
+        <div style="text-align: center;">
+            <a href="{{ verification_url }}" class="button">Verify Email Address</a>
+        </div>
+        
+        <p>Alternatively, you can copy and paste the following link into your browser:</p>
+        
+        <p class="verification-link">{{ verification_url }}</p>
+        
+        <p>This link will expire in {{ expiry_hours }} hours. If you did not sign up for an account with us, you can safely ignore this email.</p>
+        
+        <p>Thank you,<br>
+        The Network Blockchain Team</p>
+        
+        <div class="footer">
+            <p>This is an automated message, please do not reply to this email.</p>
+            <p>&copy; {{ current_year }} Network Blockchain. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

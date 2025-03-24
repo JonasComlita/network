@@ -1,0 +1,14 @@
+Hello {{ username }},
+
+Thank you for registering with our blockchain platform. To complete your registration and verify your email address, please click on the link below:
+
+{{ verification_url }}
+
+This link will expire in {{ expiry_hours }} hours. If you did not sign up for an account with us, you can safely ignore this email.
+
+Thank you,
+The Network Blockchain Team
+
+---
+This is an automated message, please do not reply to this email.
+© {{ current_year }} Network Blockchain. All rights reserved.
