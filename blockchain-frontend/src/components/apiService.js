@@ -235,13 +235,81 @@ const authService = {
   
   isAuthenticated: () => {
     return !!localStorage.getItem('token');
+  },
+
+  // Email verification methods
+  verifyEmail: async (token) => {
+    try {
+      const response = await api.get(`/verify-email/${token}/`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Password reset methods
+  requestPasswordReset: async (email) => {
+    try {
+      const response = await api.post('/password-reset/request/', { email });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  confirmPasswordReset: async (token, newPassword) => {
+    try {
+      const response = await api.post(`/password-reset/confirm/${token}/`, { 
+        new_password: newPassword 
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
+};
+
+// User profile methods
+const profileService = {
+  // Get user profile information
+  getProfile: () => fetchWithRetry(() => api.get('/user/profile/')),
+  
+  // Update user profile
+  updateProfile: (data) => fetchWithRetry(() => api.patch('/user/profile/', data)),
+  
+  // Get user preferences
+  getPreferences: () => fetchWithRetry(() => api.get('/user/preferences/')),
+  
+  // Update user preferences
+  updatePreferences: (data) => fetchWithRetry(() => api.patch('/user/preferences/', data)),
+  
+  // Change password
+  changePassword: (currentPassword, newPassword) => fetchWithRetry(() => 
+    api.post('/user/change-password/', { 
+      current_password: currentPassword, 
+      new_password: newPassword 
+    })
+  ),
+  
+  // 2FA setup methods
+  setup2FA: () => fetchWithRetry(() => api.post('/user/2fa/setup/')),
+  
+  verify2FASetup: (code) => fetchWithRetry(() => 
+    api.post('/user/2fa/verify-setup/', { code })
+  ),
+  
+  disable2FA: (code) => fetchWithRetry(() => 
+    api.post('/user/2fa/disable/', { code })
+  )
 };
 
 // API service methods
 const apiService = {
   // Auth methods
   auth: authService,
+
+  // Profile methods
+  profile: profileService,
   
   // Blocks endpoints
   getBlocks: () => fetchWithRetry(() => api.get('/blocks/')),
@@ -262,12 +330,6 @@ const apiService = {
   
   // Health check
   healthCheck: () => fetchWithRetry(() => api.get('/health-check/')),
-  
-  // User profile and preferences
-  getUserProfile: () => fetchWithRetry(() => api.get('/user_profile/')),
-  updateUserProfile: (data) => fetchWithRetry(() => api.patch('/user_profile/', data)),
-  getUserPreferences: () => fetchWithRetry(() => api.get('/user_preferences/')),
-  updateUserPreferences: (data) => fetchWithRetry(() => api.patch('/user_preferences/', data)),
   
   // Dashboard data
   getDashboard: () => fetchWithRetry(() => api.get('/dashboard/')),

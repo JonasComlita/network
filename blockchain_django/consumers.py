@@ -597,3 +597,431 @@ class WalletConsumer(AsyncWebsocketConsumer):
         """Refresh user data from database"""
         if self.user and self.user.id:
             self.user = User.objects.get(id=self.user.id)
+
+import json
+import logging
+import asyncio
+import datetime
+from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
+from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+
+User = get_user_model()
+logger = logging.getLogger('django')
+
+class AuthStatusConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for authentication status updates
+    Used to notify connected clients about auth-related events
+    """
+    
+    async def connect(self):
+        self.user = None
+        self.user_id = None
+        
+        # Try to authenticate from query params
+        query_string = self.scope.get('query_string', b'').decode()
+        query_params = {}
+        if '=' in query_string:
+            try:
+                for param in query_string.split('&'):
+                    if '=' in param:
+                        key, value = param.split('=')
+                        query_params[key] = value
+            except Exception as e:
+                logger.error(f"Error parsing query params: {e}")
+                
+        token = query_params.get('token')
+        
+        # Try to authenticate with token from query params
+        if token:
+            try:
+                self.user = await self.get_user_from_token(token)
+                self.user_id = self.user.id
+            except Exception as e:
+                logger.error(f"WebSocket auth error from query params: {e}")
+        
+        # If no token in query params or authentication failed, check if user is authenticated from scope
+        if not self.user and self.scope.get("user") and self.scope["user"].is_authenticated:
+            self.user = self.scope["user"]
+            self.user_id = self.user.id
+        
+        # Join a group specific to this user
+        if self.user_id:
+            self.auth_group_name = f"auth_user_{self.user_id}"
+            await self.channel_layer.group_add(
+                self.auth_group_name,
+                self.channel_name
+            )
+            
+        # Also join a general auth group
+        await self.channel_layer.group_add(
+            "auth_status",
+            self.channel_name
+        )
+        
+        await self.accept()
+        
+        # Send initial status
+        if self.user and self.user.is_authenticated:
+            await self.send(text_data=json.dumps({
+                'type': 'auth_status',
+                'status': 'authenticated',
+                'user_id': self.user_id,
+                'email_verified': getattr(self.user, 'email_verified', False),
+                'two_factor_enabled': getattr(self.user, 'two_factor_enabled', False)
+            }))
+        else:
+            await self.send(text_data=json.dumps({
+                'type': 'auth_status',
+                'status': 'unauthenticated'
+            }))
+    
+    async def disconnect(self, close_code):
+        # Leave auth groups
+        if hasattr(self, 'auth_group_name'):
+            await self.channel_layer.group_discard(
+                self.auth_group_name,
+                self.channel_name
+            )
+            
+        await self.channel_layer.group_discard(
+            "auth_status",
+            self.channel_name
+        )
+    
+    async def receive(self, text_data):
+        try:
+            data = json.loads(text_data)
+            
+            # Handle token auth message
+            if 'token' in data:
+                try:
+                    self.user = await self.get_user_from_token(data['token'])
+                    self.user_id = self.user.id
+                    
+                    # Join user-specific auth group
+                    if self.user_id:
+                        new_group = f"auth_user_{self.user_id}"
+                        
+                        # If we're already in a different auth group, leave it
+                        if hasattr(self, 'auth_group_name') and self.auth_group_name != new_group:
+                            await self.channel_layer.group_discard(
+                                self.auth_group_name,
+                                self.channel_name
+                            )
+                            
+                        # Join new group
+                        self.auth_group_name = new_group
+                        await self.channel_layer.group_add(
+                            self.auth_group_name,
+                            self.channel_name
+                        )
+                    
+                    # Send auth status
+                    await self.send(text_data=json.dumps({
+                        'type': 'auth_status',
+                        'status': 'authenticated',
+                        'user_id': self.user_id,
+                        'email_verified': getattr(self.user, 'email_verified', False),
+                        'two_factor_enabled': getattr(self.user, 'two_factor_enabled', False)
+                    }))
+                    
+                except Exception as e:
+                    logger.error(f"WebSocket token auth error: {e}")
+                    await self.send(text_data=json.dumps({
+                        'type': 'auth_status',
+                        'status': 'error',
+                        'message': 'Authentication failed'
+                    }))
+            
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON received in WebSocket")
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Invalid message format'
+            }))
+        except Exception as e:
+            logger.error(f"Error in WebSocket receive: {str(e)}")
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Server error processing message'
+            }))
+    
+    async def auth_status_update(self, event):
+        """Broadcast auth status updates"""
+        # Forward the message to the WebSocket
+        await self.send(text_data=json.dumps(event))
+    
+    @database_sync_to_async
+    def get_user_from_token(self, token_key):
+        """Get user from JWT token"""
+        try:
+            # Validate token
+            token = AccessToken(token_key)
+            user_id = token.payload.get('user_id')
+            
+            # Get user from database
+            user = User.objects.get(id=user_id)
+            return user
+        except (InvalidToken, TokenError, User.DoesNotExist) as e:
+            logger.error(f"Token authentication error: {str(e)}")
+            raise
+
+class TwoFactorStatusConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for 2FA status updates
+    Used to notify connected clients about 2FA setup events
+    """
+    
+    async def connect(self):
+        self.user = None
+        self.user_id = None
+        
+        # Try to authenticate from query params
+        query_string = self.scope.get('query_string', b'').decode()
+        query_params = {}
+        if '=' in query_string:
+            try:
+                for param in query_string.split('&'):
+                    if '=' in param:
+                        key, value = param.split('=')
+                        query_params[key] = value
+            except Exception as e:
+                logger.error(f"Error parsing query params: {e}")
+                
+        token = query_params.get('token')
+        
+        # Try to authenticate with token from query params
+        if token:
+            try:
+                self.user = await self.get_user_from_token(token)
+                self.user_id = self.user.id
+            except Exception as e:
+                logger.error(f"WebSocket auth error from query params: {e}")
+        
+        # If no token in query params or authentication failed, check if user is authenticated from scope
+        if not self.user and self.scope.get("user") and self.scope["user"].is_authenticated:
+            self.user = self.scope["user"]
+            self.user_id = self.user.id
+        
+        # Accept the connection only if user is authenticated
+        if self.user_id:
+            # Join user-specific 2FA group
+            self.twofa_group_name = f"twofa_user_{self.user_id}"
+            await self.channel_layer.group_add(
+                self.twofa_group_name,
+                self.channel_name
+            )
+            
+            await self.accept()
+            
+            # Send initial 2FA status
+            await self.send(text_data=json.dumps({
+                'type': '2fa_status',
+                'enabled': getattr(self.user, 'two_factor_enabled', False)
+            }))
+        else:
+            # Reject unauthenticated connections
+            await self.close()
+    
+    async def disconnect(self, close_code):
+        # Leave 2FA group
+        if hasattr(self, 'twofa_group_name'):
+            await self.channel_layer.group_discard(
+                self.twofa_group_name,
+                self.channel_name
+            )
+    
+    async def receive(self, text_data):
+        # This consumer doesn't handle incoming messages
+        pass
+    
+    async def twofa_status_update(self, event):
+        """Handle 2FA status updates"""
+        # Forward the event to the WebSocket
+        await self.send(text_data=json.dumps(event))
+    
+    @database_sync_to_async
+    def get_user_from_token(self, token_key):
+        """Get user from JWT token"""
+        try:
+            # Validate token
+            token = AccessToken(token_key)
+            user_id = token.payload.get('user_id')
+            
+            # Get user from database
+            user = User.objects.get(id=user_id)
+            return user
+        except (InvalidToken, TokenError, User.DoesNotExist) as e:
+            logger.error(f"Token authentication error: {str(e)}")
+            raise
+
+class UserWalletConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for specific wallet updates
+    Provides real-time updates for a specific wallet
+    """
+    
+    async def connect(self):
+        self.user = None
+        self.user_id = None
+        self.wallet_address = self.scope['url_route']['kwargs'].get('wallet_address')
+        
+        if not self.wallet_address:
+            logger.error("No wallet address provided in URL")
+            await self.close()
+            return
+        
+        # Try to authenticate from query params
+        query_string = self.scope.get('query_string', b'').decode()
+        query_params = {}
+        if '=' in query_string:
+            try:
+                for param in query_string.split('&'):
+                    if '=' in param:
+                        key, value = param.split('=')
+                        query_params[key] = value
+            except Exception as e:
+                logger.error(f"Error parsing query params: {e}")
+                
+        token = query_params.get('token')
+        
+        # Try to authenticate with token from query params
+        if token:
+            try:
+                self.user = await self.get_user_from_token(token)
+                self.user_id = self.user.id
+            except Exception as e:
+                logger.error(f"WebSocket auth error from query params: {e}")
+        
+        # If no token in query params or authentication failed, check if user is authenticated from scope
+        if not self.user and self.scope.get("user") and self.scope["user"].is_authenticated:
+            self.user = self.scope["user"]
+            self.user_id = self.user.id
+        
+        # Accept the connection only if user is authenticated
+        if self.user_id:
+            # Verify the wallet belongs to this user
+            wallet_owner = await self.check_wallet_ownership(self.wallet_address, self.user_id)
+            
+            if not wallet_owner:
+                logger.error(f"User {self.user_id} does not own wallet {self.wallet_address}")
+                await self.close()
+                return
+            
+            # Join wallet-specific group
+            self.wallet_group_name = f"wallet_{self.wallet_address}"
+            await self.channel_layer.group_add(
+                self.wallet_group_name,
+                self.channel_name
+            )
+            
+            await self.accept()
+            
+            # Send initial wallet status
+            wallet_data = await self.get_wallet_data(self.wallet_address)
+            
+            if wallet_data:
+                await self.send(text_data=json.dumps({
+                    'type': 'wallet_status',
+                    'wallet_address': self.wallet_address,
+                    'wallet_name': wallet_data.get('wallet_name', 'Wallet'),
+                    'balance': wallet_data.get('balance', 0),
+                    'is_primary': wallet_data.get('is_primary', False),
+                    'is_active': wallet_data.get('is_active', True)
+                }))
+            else:
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Wallet data not found'
+                }))
+        else:
+            # Reject unauthenticated connections
+            await self.close()
+    
+    async def disconnect(self, close_code):
+        # Leave wallet group
+        if hasattr(self, 'wallet_group_name'):
+            await self.channel_layer.group_discard(
+                self.wallet_group_name,
+                self.channel_name
+            )
+    
+    async def receive(self, text_data):
+        """Handle incoming messages"""
+        try:
+            data = json.loads(text_data)
+            
+            # Ignore messages for now
+            pass
+            
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON received in WebSocket")
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Invalid message format'
+            }))
+        except Exception as e:
+            logger.error(f"Error in WebSocket receive: {str(e)}")
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Server error processing message'
+            }))
+    
+    async def wallet_update(self, event):
+        """Handle wallet update events"""
+        # Forward the event to the WebSocket
+        await self.send(text_data=json.dumps(event))
+    
+    async def transaction_update(self, event):
+        """Handle transaction updates for this wallet"""
+        # Forward the event to the WebSocket
+        await self.send(text_data=json.dumps(event))
+    
+    @database_sync_to_async
+    def get_user_from_token(self, token_key):
+        """Get user from JWT token"""
+        try:
+            # Validate token
+            token = AccessToken(token_key)
+            user_id = token.payload.get('user_id')
+            
+            # Get user from database
+            user = User.objects.get(id=user_id)
+            return user
+        except (InvalidToken, TokenError, User.DoesNotExist) as e:
+            logger.error(f"Token authentication error: {str(e)}")
+            raise
+    
+    @database_sync_to_async
+    def check_wallet_ownership(self, wallet_address, user_id):
+        """Check if wallet belongs to user"""
+        from blockchain_django.models import UserWallet
+        
+        try:
+            wallet = UserWallet.objects.get(wallet_address=wallet_address, user_id=user_id)
+            return True
+        except UserWallet.DoesNotExist:
+            return False
+    
+    @database_sync_to_async
+    def get_wallet_data(self, wallet_address):
+        """Get wallet data"""
+        from blockchain_django.models import UserWallet
+        
+        try:
+            wallet = UserWallet.objects.get(wallet_address=wallet_address)
+            return {
+                'wallet_address': wallet.wallet_address,
+                'wallet_name': wallet.wallet_name,
+                'balance': float(wallet.balance),
+                'is_primary': wallet.is_primary,
+                'is_active': wallet.is_active,
+                'created_at': wallet.created_at.isoformat() if wallet.created_at else None,
+                'last_transaction_at': wallet.last_transaction_at.isoformat() if wallet.last_transaction_at else None
+            }
+        except UserWallet.DoesNotExist:
+            return None

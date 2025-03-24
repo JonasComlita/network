@@ -5,12 +5,14 @@ import apiService from '../components/apiService';
 /**
  * Enhanced React hook for using WebSockets with automatic reconnection
  * Compatible with existing apiService WebSocket implementation
+ * Now with support for multiple wallets, transactions and user profile updates
  */
 const useWebSocketEnhanced = (endpoint, options = {}) => {
   // State for WebSocket status and data
   const [status, setStatus] = useState('disconnected');
   const [lastMessage, setLastMessage] = useState(null);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [messageHistory, setMessageHistory] = useState([]);
   
   // Reference to store WebSocket instance
   const wsRef = useRef(null);
@@ -30,7 +32,9 @@ const useWebSocketEnhanced = (endpoint, options = {}) => {
     maxReconnectInterval = 30000,
     reconnectDecay = 1.5,
     formatMessage = true,
-    debug = false
+    debug = false,
+    keepMessageHistory = false,
+    historySize = 10
   } = options;
   
   // Debug logging function wrapped in useMemo to avoid dependency changes
@@ -81,6 +85,14 @@ const useWebSocketEnhanced = (endpoint, options = {}) => {
       const parsedData = formatMessage ? JSON.parse(event.data) : event.data;
       setLastMessage(parsedData);
       
+      // Add to message history if enabled
+      if (keepMessageHistory) {
+        setMessageHistory(prev => {
+          const newHistory = [parsedData, ...prev];
+          return newHistory.slice(0, historySize);
+        });
+      }
+      
       // Call user-provided onMessage handler if present
       if (onMessage) {
         onMessage(parsedData, event);
@@ -93,7 +105,7 @@ const useWebSocketEnhanced = (endpoint, options = {}) => {
         onMessage(event.data, event);
       }
     }
-  }, [onMessage, formatMessage, log]);
+  }, [onMessage, formatMessage, log, keepMessageHistory, historySize]);
   
   // Function to handle WebSocket errors
   const handleError = useCallback((event) => {
@@ -242,14 +254,22 @@ const useWebSocketEnhanced = (endpoint, options = {}) => {
     }
   }, [log]);
   
+  // Function to clear message history
+  const clearMessageHistory = useCallback(() => {
+    setMessageHistory([]);
+  }, []);
+  
   // Return hook API
   return {
     status,
     lastMessage,
+    messageHistory,
+    clearMessageHistory,
     sendMessage,
     reconnect,
     isConnected: status === 'connected',
-    connectionAttempts
+    connectionAttempts,
+    websocket: wsRef.current // Exposing the WebSocket instance for advanced usage
   };
 };
 

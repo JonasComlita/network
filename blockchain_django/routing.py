@@ -13,6 +13,14 @@ websocket_urlpatterns = [
     
     # Wallet-related WebSockets
     re_path(r'ws/wallet/$', consumers.WalletConsumer.as_asgi()),
+    re_path(r'ws/wallets/$', consumers.WalletConsumer.as_asgi()),  # Added for multiple wallets support
+    
+    # User profile WebSockets
+    re_path(r'ws/user_profile/$', consumers.UserProfileConsumer.as_asgi()),
+    re_path(r'ws/profile/$', consumers.UserProfileConsumer.as_asgi()),
+    
+    # Authentication WebSockets
+    re_path(r'ws/auth_status/$', consumers.AuthStatusConsumer.as_asgi()),  # Added for auth status updates
     
     # Analytics WebSockets
     re_path(r'ws/analytics/$', consumers.AdvancedAnalyticsConsumer.as_asgi()),
@@ -26,8 +34,10 @@ websocket_urlpatterns = [
     
     # User-related WebSockets
     re_path(r'ws/user_dashboard/$', consumers.UserDashboardConsumer.as_asgi()),
-    re_path(r'ws/user_profile/$', consumers.UserProfileConsumer.as_asgi()),
     re_path(r'ws/user_preferences/$', consumers.UserPreferencesConsumer.as_asgi()),
+    
+    # 2FA WebSockets
+    re_path(r'ws/2fa_status/$', consumers.TwoFactorStatusConsumer.as_asgi()),  # Added for 2FA status updates
     
     # Data WebSockets
     re_path(r'ws/price/$', consumers.PriceChangeConsumer.as_asgi()),
@@ -39,6 +49,9 @@ websocket_urlpatterns = [
     
     # Notification WebSockets
     re_path(r'ws/notifications/$', consumers.NotificationConsumer.as_asgi()),
+    
+    # Multi-wallet WebSockets
+    re_path(r'ws/user_wallet/(?P<wallet_address>[^/]+)/$', consumers.UserWalletConsumer.as_asgi()),  # Added for specific wallet updates
     
     # Utility WebSockets
     re_path(r'ws/health-check/$', consumers.HealthCheckConsumer.as_asgi()),

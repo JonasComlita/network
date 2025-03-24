@@ -1,14 +1,16 @@
 # blockchain_django/views/profile_views.py
 import logging
+import base64
+import io
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth import update_session_auth_hash
-from blockchain_django.models import CustomUser
+from blockchain_django.models import CustomUser, TwoFactorBackupCode
 from blockchain_django.serializers import UserProfileSerializer, UserPreferencesSerializer
-from security.mfa import MFAManager
+from blockchain_django.security.mfa import MFAManager
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +110,6 @@ class TwoFactorSetupView(APIView):
             )
             
             # Convert QR code image to base64 string for frontend
-            import io
-            import base64
             buffer = io.BytesIO()
             qr_code.save(buffer, format="PNG")
             qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
@@ -154,9 +154,13 @@ class TwoFactorVerifySetupView(APIView):
             user.two_factor_enabled = True
             user.save(update_fields=['two_factor_enabled'])
             
+            # Generate backup codes
+            backup_codes = mfa_manager.generate_backup_codes(user)
+            
             return Response({
                 'message': 'Two-factor authentication enabled successfully',
-                'status': 'enabled'
+                'status': 'enabled',
+                'backup_codes': backup_codes
             })
         else:
             return Response({
@@ -210,3 +214,45 @@ class TwoFactorDisableView(APIView):
                 'error': 'Invalid verification code',
                 'status': 'failed'
             }, status=status.HTTP_400_BAD_REQUEST)
+
+class TwoFactorBackupCodesView(APIView):
+    """
+    API view for managing 2FA backup codes
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get backup codes for the current user"""
+        user = request.user
+        
+        if not user.two_factor_enabled:
+            return Response({
+                'error': 'Two-factor authentication is not enabled'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get unused backup codes
+        backup_codes = TwoFactorBackupCode.objects.filter(user=user, used=False)
+        
+        # Convert to list of codes
+        codes = [code.code for code in backup_codes]
+        
+        return Response({
+            'codes': codes
+        })
+    
+    def post(self, request):
+        """Generate new backup codes for the current user"""
+        user = request.user
+        
+        if not user.two_factor_enabled:
+            return Response({
+                'error': 'Two-factor authentication is not enabled'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate new backup codes
+        mfa_manager = MFAManager()
+        backup_codes = mfa_manager.generate_backup_codes(user)
+        
+        return Response({
+            'codes': backup_codes
+        })
