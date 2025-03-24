@@ -1,0 +1,201 @@
+/* Futuristic UI Elements */
+
+/* Glowing effect for cards */
+.feature-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #4f46e5, transparent, #7f6df2);
+  z-index: -1;
+  border-radius: 0.6rem;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.feature-card:hover::before {
+  opacity: 1;
+  animation: rotate 3s linear infinite;
+}
+
+@keyframes rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Shimmer button effect */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Glowing text effect */
+.glowing-text {
+  text-shadow: 0 0 5px rgba(79, 70, 229, 0.5), 0 0 10px rgba(79, 70, 229, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    text-shadow: 0 0 5px rgba(79, 70, 229, 0.5), 0 0 10px rgba(79, 70, 229, 0.3);
+  }
+  50% {
+    text-shadow: 0 0 10px rgba(79, 70, 229, 0.8), 0 0 20px rgba(79, 70, 229, 0.5);
+  }
+}
+
+/* Holographic card effect */
+.holographic-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.holographic-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0) 20%,
+    rgba(255, 255, 255, 0) 80%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Animated progress bar */
+.progress-bar {
+  height: 6px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.progress-bar-inner {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #4f46e5, #7f6df2);
+  position: relative;
+  animation: progress-animation 2s ease forwards;
+}
+
+@keyframes progress-animation {
+  from { width: 0; }
+  to { width: var(--progress-width, 75%); }
+}
+
+.progress-bar-inner::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 5px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.8);
+  filter: blur(3px);
+}
+
+/* Floating particles */
+.particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background-color: rgba(79, 70, 229, 0.6);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-100vh) translateX(100px);
+    opacity: 0;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4f46e5;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6366f1;
+}
+
+/* Active state glowing effect */
+.active-glow {
+  position: relative;
+}
+
+.active-glow::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: #4f46e5;
+  box-shadow: 0 0 8px 1px #4f46e5;
+}
+
+/* Animated data counter */
+.animated-counter {
+  counter-reset: count var(--counter-from, 0);
+  animation: counter-animation 2s forwards ease-out;
+}
+
+.animated-counter::after {
+  content: counter(count);
+}
+
+@keyframes counter-animation {
+  from {
+    counter-increment: count var(--counter-from, 0);
+  }
+  to {
+    counter-increment: count var(--counter-to, 100);
+  }
+}
+
+/* Responsive layout adjustments */
+@media (max-width: 768px) {
+  .feature-card::before {
+    animation: none;
+  }
+}

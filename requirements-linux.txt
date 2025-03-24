@@ -25,7 +25,7 @@ resource
 msgpack>=1.0.5
 setuptools
 cmake
-pybloomfiltermmap3
+pybloom_live
 
 # Testing & Development - Linux-specific versions
 pytest>=7.3.1
