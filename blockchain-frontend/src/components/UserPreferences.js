@@ -9,7 +9,7 @@ const UserPreferences = ({ token }) => {
 
     useEffect(() => {
         const fetchUserPreferences = async () => {
-            const response = await axios.get('http://localhost:8000/api/profile/', {
+            const response = await axios.get('http://localhost:8000/api/user/preferences/', {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
@@ -24,7 +24,7 @@ const UserPreferences = ({ token }) => {
 
     const handleUpdatePreferences = async (e) => {
         e.preventDefault();
-        await axios.patch('http://localhost:8000/api/profile/', preferences, {
+        await axios.patch('http://localhost:8000/api/user/preferences/', preferences, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },

@@ -1,5 +1,5 @@
 // src/components/BlockchainChart.js
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Chart, registerables } from 'chart.js';
 import apiService from './apiService';
 import useWebSocketEnhanced from '../hooks/useWebSocketEnhanced';
@@ -204,13 +204,27 @@ const BlockchainChart = ({ token, blockchainData }) => {
   }, [fetchBlockDetails]);
   
   // Get the blocks data to display
-  const displayBlocks = isUsingProvidedData ? blockchainData?.blocks || [] : blocks;
-  const displayAnalytics = isUsingProvidedData ? blockchainData?.analytics : analytics;
-  const displayIsLoading = isUsingProvidedData ? blockchainData?.isLoading : isLoading;
-  const displayError = isUsingProvidedData ? blockchainData?.error : error;
-  const displaySocketStatus = isUsingProvidedData 
-    ? (blockchainData?.socketStatus?.blocks || 'disconnected') 
-    : socketStatus;
+  const displayBlocks = useMemo(() => {
+    return isUsingProvidedData ? blockchainData?.blocks || [] : blocks;
+  }, [isUsingProvidedData, blockchainData?.blocks, blocks]);
+  
+  const displayAnalytics = useMemo(() => {
+    return isUsingProvidedData ? blockchainData?.analytics : analytics;
+  }, [isUsingProvidedData, blockchainData?.analytics, analytics]);
+  
+  const displayIsLoading = useMemo(() => {
+    return isUsingProvidedData ? blockchainData?.isLoading : isLoading;
+  }, [isUsingProvidedData, blockchainData?.isLoading, isLoading]);
+  
+  const displayError = useMemo(() => {
+    return isUsingProvidedData ? blockchainData?.error : error;
+  }, [isUsingProvidedData, blockchainData?.error, error]);
+  
+  const displaySocketStatus = useMemo(() => {
+    return isUsingProvidedData 
+      ? (blockchainData?.socketStatus?.blocks || 'disconnected') 
+      : socketStatus;
+  }, [isUsingProvidedData, blockchainData?.socketStatus?.blocks, socketStatus]);
   
   // Create transaction chart when block data changes
   useEffect(() => {

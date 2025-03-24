@@ -28,6 +28,12 @@ def ensure_event_loop(func):
         return loop.run_until_complete(func(*args, **kwargs))
     return wrapper
 
+# Add the missing run_async function
+def run_async(coroutine, timeout=30):
+    """Run an async function from a synchronous context"""
+    loop = get_or_create_event_loop()
+    return loop.run_until_complete(asyncio.wait_for(coroutine, timeout))
+
 # Monkey patch key blockchain methods that might be called from threads
 def patch_blockchain_async_methods():
     try:

@@ -145,7 +145,13 @@ const RegistrationSuccess = ({ registrationData, onLogin, onViewWallet, onViewPr
       
       {/* Help Link */}
       <p className="text-center text-sm text-gray-500 mt-6">
-        Need help? <a href="#" className="text-blue-600 hover:text-blue-800">Contact support</a>
+        Need help?{' '}
+        <button 
+          onClick={() => window.location.href = '/support'}
+          className="text-blue-600 hover:text-blue-800 bg-transparent border-none p-0 underline cursor-pointer"
+        >
+          Contact support
+        </button>
       </p>
     </div>
   );

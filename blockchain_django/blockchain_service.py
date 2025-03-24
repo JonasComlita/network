@@ -8,9 +8,8 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# At the very top of the file, before other imports
 try:
-    import fix_postgres
+    import blockchain_django.fix_postgres
     import fix_asyncio
 except ImportError:
     print("Warning: fix_postgres.py not found - database connections may fail")

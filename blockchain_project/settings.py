@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -91,7 +92,7 @@ ROOT_URLCONF = "blockchain_project.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / 'templates'],
+        "DIRS": [os.path.join(BASE_DIR, 'blockchain_django', 'templates')],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -99,6 +100,25 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                'blockchain_django.context_processors.blockchain_context',
+                'blockchain_django.context_processors.user_context',
+                'blockchain_django.context_processors.wallet_context',
+                'blockchain_django.context_processors.notification_context',
+                'blockchain_django.context_processors.security_context',
+                'blockchain_django.context_processors.analytics_context',
+                'blockchain_django.context_processors.price_context',
+                'blockchain_django.context_processors.market_context',
+                'blockchain_django.context_processors.news_context',
+                'blockchain_django.context_processors.historical_context',
+                'blockchain_django.context_processors.user_analytics_context',
+                'blockchain_django.context_processors.market_data_context',
+                'blockchain_django.context_processors.historical_data_context',
+                'blockchain_django.context_processors.news_data_context',
+                'blockchain_django.context_processors.user_analytics_context',
+                'blockchain_django.context_processors.market_data_context',
+                'blockchain_django.context_processors.historical_data_context',
+                'blockchain_django.context_processors.news_data_context',
+                'blockchain_django.context_processors.add_current_year',
             ],
         },
     },
@@ -142,7 +162,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 
 # Email settings
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 EMAIL_HOST = 'smtp.your-email-provider.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True

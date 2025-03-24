@@ -60,8 +60,11 @@ const PriceData = () => {
                     return;
                 }
                 
-                // Create new WebSocket connection with the token
-                const wsUrl = `ws://localhost:8000/ws/price/?token=${token}&t=${new Date().getTime()}`;
+                // Determine the proper WebSocket URL
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.hostname;
+                const port = "8000"; // Your backend port
+                const wsUrl = `${protocol}//${host}:${port}/ws/price/?token=${token}&t=${new Date().getTime()}`;
                 console.log(`Attempting to connect to WebSocket: ${wsUrl}`);
                 
                 setWsStatus('connecting');
@@ -70,6 +73,16 @@ const PriceData = () => {
                 socketRef.current.onopen = () => {
                     console.log('Price WebSocket connection established');
                     setWsStatus('connected');
+                    
+                    // Send initial message to confirm connection
+                    try {
+                        socketRef.current.send(JSON.stringify({
+                            type: 'ping',
+                            message: 'Client connected'
+                        }));
+                    } catch (err) {
+                        console.warn('Error sending initial WebSocket message:', err);
+                    }
                 };
                 
                 socketRef.current.onmessage = (event) => {

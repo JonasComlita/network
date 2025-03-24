@@ -78,7 +78,8 @@ class EmailVerifier:
             context = {
                 'username': user.username,
                 'verification_url': verification_url,
-                'expiry_hours': cls.TOKEN_EXPIRY_HOURS
+                'expiry_hours': cls.TOKEN_EXPIRY_HOURS,
+                'current_year': datetime.now().year
             }
             html_message = render_to_string('emails/verify_email.html', context)
             plain_message = render_to_string('emails/verify_email.txt', context)
@@ -128,7 +129,8 @@ class EmailVerifier:
             context = {
                 'username': user.username,
                 'reset_url': reset_url,
-                'expiry_hours': cls.TOKEN_EXPIRY_HOURS
+                'expiry_hours': cls.TOKEN_EXPIRY_HOURS,
+                'current_year': datetime.now().year
             }
             html_message = render_to_string('emails/password_reset.html', context)
             plain_message = render_to_string('emails/password_reset.txt', context)

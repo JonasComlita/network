@@ -132,25 +132,56 @@ class TransactionConsumer(AsyncWebsocketConsumer):
     async def send_transaction_update(self, event):
         await self.send(text_data=json.dumps(event))
 
+# In consumers.py
 class PriceChangeConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for price data updates
+    """
     async def connect(self):
-        await self.channel_layer.group_add("price_changes", self.channel_name)
+        # Debug log
+        logger.info(f"WebSocket connection attempt for price data")
+        
+        # Accept the connection
         await self.accept()
         
-        # Send initial confirmation message with sample data
+        # Add channel to price update group
+        await self.channel_layer.group_add(
+            "price_updates",
+            self.channel_name
+        )
+        
+        # Send initial connection message
         await self.send(text_data=json.dumps({
             'type': 'connection_established',
-            'message': 'Connected to price WebSocket',
-            'bitcoin': {
-                'usd': 53245.67  # Sample price data
-            }
+            'message': 'Connected to price update stream'
         }))
-
+        
+        logger.info(f"WebSocket connection accepted for price data")
+    
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard("price_changes", self.channel_name)
-
-    async def send_price_change_update(self, event):
-        await self.send(text_data=json.dumps(event))
+        # Remove channel from group on disconnect
+        await self.channel_layer.group_discard(
+            "price_updates",
+            self.channel_name
+        )
+        logger.info(f"WebSocket disconnected for price data: {close_code}")
+    
+    async def receive(self, text_data):
+        # Handle messages from the client (usually just pings)
+        try:
+            data = json.loads(text_data)
+            if data.get('type') == 'ping':
+                await self.send(text_data=json.dumps({
+                    'type': 'pong',
+                    'message': 'Server received ping'
+                }))
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON received in price WebSocket: {text_data}")
+    
+    # Handler for price update messages
+    async def price_update(self, event):
+        # Send price update to WebSocket
+        await self.send(text_data=json.dumps(event['data']))
 
 class HistoricalTransactionDataConsumer(AsyncWebsocketConsumer):
     async def connect(self):

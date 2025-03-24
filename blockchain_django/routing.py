@@ -17,7 +17,6 @@ websocket_urlpatterns = [
     
     # User profile WebSockets
     re_path(r'ws/user_profile/$', consumers.UserProfileConsumer.as_asgi()),
-    re_path(r'ws/profile/$', consumers.UserProfileConsumer.as_asgi()),
     
     # Authentication WebSockets
     re_path(r'ws/auth_status/$', consumers.AuthStatusConsumer.as_asgi()),  # Added for auth status updates

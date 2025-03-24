@@ -187,15 +187,17 @@ class MFAManager:
             secret (str): Secret to store
         """
         try:
-            # Try to find user by ID (assuming user_id is the user's primary key)
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
+            # Try to find user by ID, handling string IDs properly
             try:
-                # Try to find user by wallet address
+                # Try to convert to integer if it's a numeric string
+                user_id_int = int(user_id)
+                user = User.objects.get(id=user_id_int)
+            except (ValueError, User.DoesNotExist):
+                # If not a numeric ID, try by wallet address
                 user = User.objects.get(wallet_address=user_id)
-            except User.DoesNotExist:
-                logger.error(f"User not found for MFA setup: {user_id}")
-                return
+        except User.DoesNotExist:
+            logger.error(f"User not found for MFA setup: {user_id}")
+            return
         
         # Store the secret in the user model
         user.twofa_secret = secret
@@ -212,15 +214,17 @@ class MFAManager:
             str: The stored secret key or None if not found
         """
         try:
-            # Try to find user by ID (assuming user_id is the user's primary key)
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
+            # Try to find user by ID, handling string IDs properly
             try:
-                # Try to find user by wallet address
+                # Try to convert to integer if it's a numeric string
+                user_id_int = int(user_id)
+                user = User.objects.get(id=user_id_int)
+            except (ValueError, User.DoesNotExist):
+                # If not a numeric ID, try by wallet address
                 user = User.objects.get(wallet_address=user_id)
-            except User.DoesNotExist:
-                logger.error(f"User not found for MFA lookup: {user_id}")
-                return None
+        except User.DoesNotExist:
+            logger.error(f"User not found for MFA lookup: {user_id}")
+            return None
         
         # Get the secret from the user model
         return user.twofa_secret
