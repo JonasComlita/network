@@ -558,4 +558,157 @@ apiService.createWebSocketWithReconnect = (endpoint, options = {}) => {
   return ws;
 };
 
+apiService.forum = {
+  // Connect to forum updates
+  connectToForumUpdates: (options = {}) => {
+    return apiService.createWebSocketWithReconnect('forum', options);
+  },
+  
+  // Connect to specific thread updates
+  connectToThreadUpdates: (threadId, options = {}) => {
+    return apiService.createWebSocketWithReconnect(`forum/thread/${threadId}`, options);
+  },
+  
+  // Connect to specific category updates
+  connectToCategoryUpdates: (categorySlug, options = {}) => {
+    return apiService.createWebSocketWithReconnect(`forum/category/${categorySlug}`, options);
+  },
+  
+  // Get forum categories
+  getCategories: () => 
+    fetchWithRetry(() => api.get('/forum/categories/')),
+  
+  // Get threads (with optional category filter)
+  getThreads: (categorySlug = null) => {
+    const url = categorySlug 
+      ? `/forum/threads/?category_slug=${encodeURIComponent(categorySlug)}`
+      : '/forum/threads/';
+    return fetchWithRetry(() => api.get(url));
+  },
+  
+  // Get thread details
+  getThread: (slug) => 
+    fetchWithRetry(() => api.get(`/forum/threads/${slug}/`)),
+  
+  // Create a new thread
+  createThread: (title, body, categoryId) => 
+    fetchWithRetry(() => api.post('/forum/threads/create/', {
+      title,
+      body,
+      category: categoryId
+    })),
+  
+  // Create a reply
+  createReply: (threadId, body) => 
+    fetchWithRetry(() => api.post('/forum/replies/create/', {
+      thread: threadId,
+      body
+    })),
+  
+  // Get popular threads
+  getPopularThreads: () => 
+    fetchWithRetry(() => api.get('/forum/popular-threads/')),
+  
+  // Search forum content
+  search: (query) => 
+    fetchWithRetry(() => api.get(`/forum/search/?q=${encodeURIComponent(query)}`)),
+  
+  // Get user's threads
+  getUserThreads: () => 
+    fetchWithRetry(() => api.get('/forum/my-threads/')),
+  
+  // Get user's replies
+  getUserReplies: () => 
+    fetchWithRetry(() => api.get('/forum/my-replies/'))
+};
+
+// Gaming WebSocket methods
+apiService.gaming = {
+  // Connect to gaming updates
+  connectToGamingUpdates: (options = {}) => {
+    return apiService.createWebSocketWithReconnect('gaming', options);
+  },
+  
+  // Connect to specific game updates
+  connectToGameUpdates: (gameId, options = {}) => {
+    return apiService.createWebSocketWithReconnect(`gaming/games/${gameId}`, options);
+  },
+  
+  // Connect to leaderboard updates
+  connectToLeaderboardUpdates: (gameId, options = {}) => {
+    return apiService.createWebSocketWithReconnect(`gaming/leaderboards/${gameId}`, options);
+  },
+  
+  // Connect to NFT updates
+  connectToNFTUpdates: (options = {}) => {
+    return apiService.createWebSocketWithReconnect('gaming/nfts', options);
+  },
+  
+  // Get game categories
+  getCategories: () => 
+    fetchWithRetry(() => api.get('/gaming/categories/')),
+  
+  // Get games (with optional category filter)
+  getGames: (categorySlug = null) => {
+    const url = categorySlug 
+      ? `/gaming/games/?category=${encodeURIComponent(categorySlug)}`
+      : '/gaming/games/';
+    return fetchWithRetry(() => api.get(url));
+  },
+  
+  // Get game details
+  getGame: (slug) => 
+    fetchWithRetry(() => api.get(`/gaming/games/${slug}/`)),
+  
+  // Get user's NFT inventory
+  getNFTs: (filters = {}) => {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      queryParams.append(key, value);
+    });
+    
+    const queryString = queryParams.toString();
+    const url = queryString ? `/gaming/nfts/?${queryString}` : '/gaming/nfts/';
+    
+    return fetchWithRetry(() => api.get(url));
+  },
+  
+  // Get game wallet info
+  getWallet: () => 
+    fetchWithRetry(() => api.get('/gaming/wallet/')),
+  
+  // Get game transactions
+  getTransactions: () => 
+    fetchWithRetry(() => api.get('/gaming/transactions/')),
+  
+  // Start a game session
+  startGame: (gameSlug) => 
+    fetchWithRetry(() => api.post('/gaming/play/start/', { game_slug: gameSlug })),
+  
+  // End a game session and record results
+  endGame: (sessionId, score, completedObjectives = 0, achievements = []) => 
+    fetchWithRetry(() => api.post('/gaming/play/end/', {
+      session_id: sessionId,
+      score,
+      completed_objectives: completedObjectives,
+      achievements
+    })),
+  
+  // Get game leaderboard
+  getLeaderboard: (gameSlug, period = 'weekly') => 
+    fetchWithRetry(() => api.get(`/gaming/leaderboard/${gameSlug}/?period=${period}`)),
+  
+  // Get game launch info
+  getLaunchInfo: (gameSlug) => 
+    fetchWithRetry(() => api.get(`/gaming/launch/${gameSlug}/`)),
+  
+  // Get gaming dashboard
+  getDashboard: () => 
+    fetchWithRetry(() => api.get('/gaming/dashboard/')),
+  
+  // Search games
+  search: (query) => 
+    fetchWithRetry(() => api.get(`/gaming/search/?q=${encodeURIComponent(query)}`))
+};
+
 export default apiService;

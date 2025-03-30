@@ -1,0 +1,869 @@
+            // Synth for other instrument types - simplified approach using only basic synths
+            synth = new Tone.PolySynth(Tone.Synth).toDestination();
+            fmSynth = new Tone.Synth().toDestination();
+            pluckSynth = new Tone.Synth().toDestination();
+            
+            // Set initial volumes
+            const initialVolume = -10; // Reduced volume (in dB)
+            drumSampler.volume.value = initialVolume;
+            pianoSampler.volume.value = initialVolume;
+            synth.volume.value = initialVolume;
+            fmSynth.volume.value = initialVolume;
+            pluckSynth.volume.value = initialVolume;
+            
+            // Update volume slider
+            document.getElementById("volume-slider").value = 75;
+            document.getElementById("volume-value").textContent = "75%";
+            
+            // Mark audio as initialized
+            audioInitialized = true;
+            
+            console.log("Audio initialized successfully");
+        }
+        
+        // Initialize the UI
+        function initializeUI() {
+            console.log("Debug: Initializing UI");
+            
+            // Reset any existing state
+            drumGrid = [];
+            pianoGrid = [];
+            
+            // Ensure DOM elements exist before trying to populate them
+            const drumGridContainer = document.getElementById("grid");
+            const pianoGridContainer = document.getElementById("piano-grid");
+            
+            if (!drumGridContainer) {
+                console.error("Drum grid container not found in DOM!");
+                // Create the container if it doesn't exist
+                const gridContainer = document.querySelector(".grid-container");
+                if (gridContainer) {
+                    const newGrid = document.createElement("div");
+                    newGrid.id = "grid";
+                    gridContainer.appendChild(newGrid);
+                    console.log("Created missing drum grid container");
+                }
+            }
+            
+            if (!pianoGridContainer) {
+                console.error("Piano grid container not found in DOM!");
+                // Create the container if it doesn't exist
+                const pianoGridParent = document.querySelector(".piano-grid-container");
+                if (pianoGridParent) {
+                    const newPianoGrid = document.createElement("div");
+                    newPianoGrid.id = "piano-grid";
+                    pianoGridParent.appendChild(newPianoGrid);
+                    console.log("Created missing piano grid container");
+                }
+            }
+            
+            // Create UI elements with a slight delay to ensure DOM is ready
+            setTimeout(() => {
+                // Create drum sequencer UI
+                createDrumBeatMarkers();
+                createDrumGrid();
+                
+                // Create piano UI
+                createPianoBeatMarkers();
+                createPiano();
+                
+                console.log("Setting initial tab state to 'drums'");
+                document.getElementById('drums-tab').style.display = 'block';
+                document.getElementById('piano-tab').style.display = 'none';
+                
+                // Force redraw of drum grid for visibility
+                const drumGrid = document.getElementById('grid');
+                if (drumGrid) {
+                    console.log("Forcing drum grid reflow");
+                    drumGrid.style.display = 'none';
+                    setTimeout(() => {
+                        drumGrid.style.display = 'block';
+                    }, 50);
+                }
+            }, 300); // Increased timeout to ensure DOM is ready
+            
+            // Set up event listeners after DOM is ready
+            setTimeout(() => {
+                setupEventListeners();
+            }, 500);
+        }
+        
+        // Create beat markers for drums (1, 2, 3, 4, etc.)
+        function createDrumBeatMarkers() {
+            const beatMarkersContainer = document.getElementById("beat-markers");
+            beatMarkersContainer.innerHTML = ''; // Clear any existing markers
+            
+            for (let i = 0; i < NUM_STEPS; i++) {
+                const marker = document.createElement("div");
+                marker.className = "beat-marker";
+                marker.textContent = i + 1;
+                beatMarkersContainer.appendChild(marker);
+            }
+        }
+        
+        // Create beat markers for piano
+        function createPianoBeatMarkers() {
+            const beatMarkersContainer = document.getElementById("piano-beat-markers");
+            beatMarkersContainer.innerHTML = ''; // Clear any existing markers
+            
+            for (let i = 0; i < NUM_STEPS; i++) {
+                const marker = document.createElement("div");
+                marker.className = "beat-marker";
+                marker.textContent = i + 1;
+                beatMarkersContainer.appendChild(marker);
+            }
+        }
+        
+        // Create the drum sequencer grid
+        function createDrumGrid() {
+            console.log("Creating drum grid...");
+            const gridContainer = document.getElementById("grid");
+            
+            if (!gridContainer) {
+                console.error("Cannot create drum grid - container not found!");
+                return;
+            }
+            
+            gridContainer.innerHTML = ''; // Clear any existing grid
+            
+            for (let row = 0; row < DRUM_INSTRUMENTS.length; row++) {
+                const instrument = DRUM_INSTRUMENTS[row];
+                const gridRow = document.createElement("div");
+                gridRow.className = "grid-row";
+                
+                // Create row label
+                const rowLabel = document.createElement("div");
+                rowLabel.className = "row-label";
+                rowLabel.textContent = instrument.name;
+                gridRow.appendChild(rowLabel);
+                
+                // Create grid cells container
+                const gridCells = document.createElement("div");
+                gridCells.className = "grid-cells";
+                
+                // Create grid cells for this row
+                drumGrid[row] = [];        @media (max-width: 768px) {
+            :root {
+                --cell-size: 30px;
+            }
+            
+            .row-label {
+                width: 80px;
+                font-size: 14px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .slider-container {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .piano {
+                height: 150px;
+            }
+            
+            .key-label {
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Grid Sound Sequencer with Piano</h1>
+    
+    <div class="controls">
+        <div class="transport-controls">
+            <button id="play-button">Play</button>
+            <button id="stop-button">Stop</button>
+            <button id="clear-all-button">Clear All</button>
+        </div>
+        
+        <div class="slider-container">
+            <label for="tempo-slider">Tempo:</label>
+            <input type="range" id="tempo-slider" min="60" max="200" value="120">
+            <div id="tempo-value" class="value-display">120 BPM</div>
+        </div>
+        
+        <div class="slider-container">
+            <label for="volume-slider">Master Volume:</label>
+            <input type="range" id="volume-slider" min="0" max="100" value="75">
+            <div id="volume-value" class="value-display">75%</div>
+        </div>
+    </div>
+    
+    <!-- Tabs for switching between drum sequencer and piano -->
+    <div class="tabs">
+        <div class="tab active" data-tab="drums" onclick="switchTab('drums')">Drum Sequencer</div>
+        <div class="tab" data-tab="piano" onclick="switchTab('piano')">Piano</div>
+    </div>
+    
+    <!-- Drum Sequencer Tab -->
+    <div class="tab-content active" id="drums-tab" style="display:block;">
+        <div class="grid-container">
+            <div class="beat-markers" id="beat-markers"></div>
+            <div id="grid"></div>
+        </div>
+    </div>
+    
+    <!-- Piano Tab -->
+    <div class="tab-content" id="piano-tab" style="display:none;">
+        <div class="piano-container">
+            <div class="piano-controls">
+                <div class="piano-control-group">
+                    <label class="piano-label">Octave:</label>
+                    <button id="octave-down">-</button>
+                    <div id="octave-display" class="value-display">4</div>
+                    <button id="octave-up">+</button>
+                </div>
+                
+                <div class="piano-control-group">
+                    <label class="piano-label">Instrument:</label>
+                    <select id="instrument-select">
+                        <option value="piano">Piano</option>
+                        <option value="synth">Synth</option>
+                        <option value="bass">Bass</option>
+                        <option value="strings">Strings</option>
+                    </select>
+                </div>
+                
+                <div class="piano-control-group">
+                    <div id="current-note" class="piano-note-display">-</div>
+                </div>
+            </div>
+            
+            <div class="piano" id="piano"></div>
+            
+            <div class="piano-grid-container">
+                <div class="beat-markers" id="piano-beat-markers"></div>
+                <div id="piano-grid"></div>
+            </div>
+            
+            <button id="add-note-btn" class="add-note-btn">Add Current Note to Grid</button>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script>
+        // Add a test function for audio
+        async function testAudio() {
+            try {
+                // Start audio context
+                await Tone.start();
+                console.log("Tone.js started successfully");
+                
+                // Create a simple synth and play a note
+                const testSynth = new Tone.Synth().toDestination();
+                testSynth.volume.value = 0; // Normal volume
+                
+                console.log("Playing test tone...");
+                testSynth.triggerAttackRelease("C4", "8n");
+                
+                // Check for any warnings
+                if (Tone.context.state !== "running") {
+                    console.warn("Warning: Audio context not running:", Tone.context.state);
+                }
+                
+                return "Audio test completed";
+            } catch (error) {
+                console.error("Audio test failed:", error);
+                return "Audio test failed: " + error.message;
+            }
+        }
+        
+        // Constants
+        const NUM_STEPS = 16;
+        const DRUM_INSTRUMENTS = [
+            { name: "Kick", sound: "C1", color: "#bb86fc" },
+            { name: "Snare", sound: "E1", color: "#03dac6" },
+            { name: "Hi-hat Closed", sound: "G#1", color: "#cf6679" },
+            { name: "Hi-hat Open", sound: "A#1", color: "#ffab40" },
+            { name: "Clap", sound: "D1", color: "#64ffda" },
+            { name: "Tom Low", sound: "F1", color: "#b388ff" },
+            { name: "Tom High", sound: "B1", color: "#ff8a80" },
+            { name: "Cymbal", sound: "C2", color: "#ffd180" }
+        ];
+        
+        const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const KEY_MAPPING = {
+            'a': 'C4', 'w': 'C#4', 's': 'D4', 'e': 'D#4', 'd': 'E4', 'f': 'F4',
+            't': 'F#4', 'g': 'G4', 'y': 'G#4', 'h': 'A4', 'u': 'A#4', 'j': 'B4',
+            'k': 'C5', 'o': 'C#5', 'l': 'D5', 'p': 'D#5', ';': 'E5'
+        };
+        
+        // Global Variables
+        let currentStep = -1;
+        let isPlaying = false;
+        let currentTab = 'drums';
+        let drumGrid = [];
+        let pianoGrid = [];
+        let currentOctave = 4;
+        let currentInstrument = 'piano';
+        let lastPlayedNote = null;
+        
+        // Direct tab switching function is now defined at the top of the document
+        
+        // Set up Tone.js instruments - simplified with fewer samples to load
+        let drumSampler = null;
+        let pianoSampler = null;
+        let synth = null;
+        let fmSynth = null;
+        let pluckSynth = null;
+        
+        // Keep track of audio initialization
+        let audioInitialized = false;
+        
+        // Initialize audio with user interaction
+        function initAudio() {
+            console.log("Initializing audio...");
+            
+            // Explicitly resume audio context if it exists
+            if (Tone.context && Tone.context.state !== "running") {
+                Tone.context.resume().then(() => {
+                    console.log("AudioContext successfully resumed!");
+                }).catch(err => {
+                    console.error("Failed to resume AudioContext:", err);
+                });
+            }
+            
+            // Clean up any existing instruments
+            if (drumSampler) drumSampler.dispose();
+            if (pianoSampler) pianoSampler.dispose();
+            if (synth) synth.dispose();
+            if (fmSynth) fmSynth.dispose();
+            if (pluckSynth) pluckSynth.dispose();
+            
+            // Create new instruments with simplified sample sets and working URLs
+            drumSampler = new Tone.Sampler({
+                urls: {
+                    // Updated with working URLs from salamander piano samples
+                    "C1": "https://tonejs.github.io/audio/salamander/C1.mp3", 
+                    "E1": "https://tonejs.github.io/audio/salamander/E1.mp3"
+                },
+                onload: () => {
+                    console.log("Drum sampler loaded with working samples");
+                    
+                    // Once loaded, try playing a silent test sound
+                    drumSampler.volume.value = -100; // Silent
+                    drumSampler.triggerAttackRelease("C1", "32n");
+                    drumSampler.volume.value = 0; // Reset volume
+                }
+            }).toDestination();
+            
+            // Set up piano with minimal samples
+            pianoSampler = new Tone.Sampler({
+                urls: {
+                    "A4": "https://tonejs.github.io/audio/salamander/A4.mp3",
+                },
+                onload: () => {
+                    console.log("Piano sampler loaded with minimal samples");
+                    
+                    // Once loaded, try playing a silent test sound
+                    pianoSampler.volume.value = -100; // Silent
+                    pianoSampler.triggerAttackRelease("A4", "32n");
+                    pianoSampler.volume.value = 0; // Reset volume
+                }
+            }).toDestination();<script>
+    function ensureDomElements() {
+        // Check for drum grid container
+        const drumTab = document.getElementById("drums-tab");
+        if (drumTab) {
+            let gridContainer = drumTab.querySelector(".grid-container");
+            if (!gridContainer) {
+                console.error("Grid container missing, creating it");
+                gridContainer = document.createElement("div");
+                gridContainer.className = "grid-container";
+                drumTab.appendChild(gridContainer);
+            }
+            
+            let beatMarkers = gridContainer.querySelector("#beat-markers");
+            if (!beatMarkers) {
+                console.log("Creating missing beat markers");
+                beatMarkers = document.createElement("div");
+                beatMarkers.id = "beat-markers";
+                beatMarkers.className = "beat-markers";
+                gridContainer.appendChild(beatMarkers);
+            }
+            
+            let grid = gridContainer.querySelector("#grid");
+            if (!grid) {
+                console.log("Creating missing grid");
+                grid = document.createElement("div");
+                grid.id = "grid";
+                gridContainer.appendChild(grid);
+            }
+        }
+    }
+
+    // Global tab switching function - defined at the top level before any HTML
+    function switchTab(tabId) {
+        console.log("switchTab called with:", tabId);
+        
+        // Update active tab
+        document.querySelectorAll('.tab').forEach(t => {
+            t.classList.remove('active');
+            if (t.dataset.tab === tabId) {
+                t.classList.add('active');
+            }
+        });
+        
+        // Update visible content
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+            content.style.display = 'none';
+        });
+        
+        const tabContent = document.getElementById(tabId + '-tab');
+        if (tabContent) {
+            tabContent.classList.add('active');
+            tabContent.style.display = 'block';
+            
+            // Special handling for drum grid display problems
+            if (tabId === 'drums') {
+                // Check if grid exists, and create it if not
+                const drumGridContainer = document.querySelector(".grid-container");
+                let drumGrid = document.getElementById('grid');
+                
+                if (!drumGrid && drumGridContainer) {
+                    console.log("Creating missing drum grid");
+                    drumGrid = document.createElement("div");
+                    drumGrid.id = "grid";
+                    drumGridContainer.appendChild(drumGrid);
+                    createDrumGrid(); // Recreate the grid
+                }
+                
+                if (drumGrid) {
+                    console.log("Forcing drum grid reflow");
+                    drumGrid.style.display = 'none';
+                    setTimeout(() => {
+                        drumGrid.style.display = 'block';
+                    }, 50);
+                }
+            } else if (tabId === 'piano') {
+                // Check if piano grid exists, and create it if not
+                const pianoGridContainer = document.querySelector(".piano-grid-container");
+                let pianoGrid = document.getElementById('piano-grid');
+                
+                if (!pianoGrid && pianoGridContainer) {
+                    console.log("Creating missing piano grid");
+                    pianoGrid = document.createElement("div");
+                    pianoGrid.id = "piano-grid";
+                    pianoGridContainer.appendChild(pianoGrid);
+                    createPianoGrid(); // Recreate the grid
+                }
+                
+                // Force piano container refresh
+                const pianoContainer = document.getElementById('piano');
+                if (pianoContainer) {
+                    pianoContainer.style.display = 'none';
+                    setTimeout(() => {
+                        pianoContainer.style.display = 'flex';
+                        
+                        // Also refresh the piano grid
+                        if (pianoGrid) {
+                            pianoGrid.style.display = 'none';
+                            setTimeout(() => {
+                                pianoGrid.style.display = 'block';
+                            }, 50);
+                        }
+                    }, 50);
+                }
+            }
+        } else {
+            console.error("Tab content not found for", tabId);
+        }
+        
+        // Update current tab (this will be set when main script loads)
+        if (window.currentTab !== undefined) {
+            window.currentTab = tabId;
+        }
+        
+        console.log("Tab switched to:", tabId);
+    }
+</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grid Sound Sequencer with Piano</title>
+    <style>
+        :root {
+            --primary-color: #6200ea;
+            --secondary-color: #3700b3;
+            --bg-color: #121212;
+            --grid-color: #2d2d2d;
+            --active-color: #bb86fc;
+            --text-color: #ffffff;
+            --cell-size: 40px;
+            --white-key-color: #ffffff;
+            --black-key-color: #333333;
+            --white-key-active: #bb86fc;
+            --black-key-active: #7f39fb;
+            --key-border-color: #555555;
+            --tab-active: #6200ea;
+            --tab-inactive: #3700b3;
+        }
+
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        h1 {
+            color: var(--active-color);
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .transport-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .slider-container label {
+            min-width: 120px;
+        }
+
+        input[type="range"] {
+            width: 200px;
+        }
+
+        .value-display {
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .grid-container {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--grid-color);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+            max-width: 100%;
+            width: 100%;
+        }
+
+        .grid-row {
+            display: flex;
+            margin-bottom: 5px;
+        }
+
+        .row-label {
+            width: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .grid-cells {
+            display: flex;
+        }
+
+        .grid-cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background-color: rgba(255, 255, 255, 0.1);
+            margin-right: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .grid-cell:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .grid-cell.active {
+            background-color: var(--active-color);
+        }
+
+        .grid-cell.playing {
+            box-shadow: 0 0 10px 2px var(--active-color);
+        }
+
+        .beat-markers {
+            display: flex;
+            margin-left: 100px;
+            margin-bottom: 5px;
+        }
+
+        .beat-marker {
+            width: var(--cell-size);
+            text-align: center;
+            margin-right: 5px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .clear-buttons {
+            display: flex;
+            margin-top: 20px;
+            gap: 10px;
+        }
+
+        .clear-row-button {
+            background-color: #ff5252;
+            margin-left: auto;
+        }
+
+        .clear-row-button:hover {
+            background-color: #ff1744;
+        }
+
+        /* Piano styles */
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 10px 20px;
+            text-align: center;
+            background-color: var(--tab-inactive);
+            color: white;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            margin-right: 2px;
+            user-select: none;
+            font-weight: bold;
+        }
+        
+        .tab.active {
+            background-color: var(--tab-active);
+        }
+        
+        .tab-content {
+            display: none;
+            width: 100%;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .piano-container {
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--grid-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .piano {
+            display: flex;
+            position: relative;
+            width: 100%;
+            height: 200px;
+            margin-bottom: 20px;
+            user-select: none;
+        }
+        
+        .octave {
+            display: flex;
+            position: relative;
+            height: 100%;
+            flex: 1;
+        }
+        
+        .key {
+            border: 1px solid var(--key-border-color);
+            box-sizing: border-box;
+            position: relative;
+        }
+        
+        .white-key {
+            background-color: var(--white-key-color);
+            flex: 1;
+            height: 100%;
+            z-index: 1;
+            border-radius: 0 0 4px 4px;
+        }
+        
+        .white-key.active {
+            background-color: var(--white-key-active);
+        }
+        
+        .black-key {
+            background-color: var(--black-key-color);
+            width: 60%;
+            height: 65%;
+            position: absolute;
+            z-index: 2;
+            border-radius: 0 0 4px 4px;
+        }
+        
+        .black-key.active {
+            background-color: var(--black-key-active);
+        }
+        
+        .key-label {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-color);
+            pointer-events: none;
+        }
+        
+        .white-key .key-label {
+            color: #333;
+        }
+        
+        .black-key .key-label {
+            color: white;
+            bottom: 5px;
+        }
+        
+        .piano-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .piano-control-group {
+            display: flex;
+            align-items: center;
+            margin: 10px;
+            gap: 10px;
+        }
+        
+        .piano-label {
+            min-width: 100px;
+        }
+        
+        .piano-note-display {
+            min-width: 120px;
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+        
+        /* Piano grid */
+        .piano-grid-container {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--grid-color);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+            max-width: 100%;
+            margin-top: 20px;
+        }
+        
+        .piano-grid-row {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        
+        .piano-note-label {
+            width: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+            color: var(--text-color);
+        }
+        
+        .piano-grid-cells {
+            display: flex;
+        }
+        
+        .piano-grid-cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background-color: rgba(255, 255, 255, 0.1);
+            margin-right: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .piano-grid-cell:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .piano-grid-cell.active {
+            background-color: var(--active-color);
+        }
+        
+        .piano-grid-cell.playing {
+            box-shadow: 0 0 10px 2px var(--active-color);
+        }
+        
+        /* Button to add notes to the grid */
+        .add-note-btn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        .add-note-btn:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        @media

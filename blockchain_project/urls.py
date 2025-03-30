@@ -125,6 +125,12 @@ urlpatterns = [
     path('api/wallets/<str:wallet_address>/transactions/', WalletTransactionHistoryView.as_view(), name='wallet_transactions'),
     path('api/wallets/<str:wallet_address>/send/', SendTransactionView.as_view(), name='send_transaction'),
     path('api/wallets/<str:wallet_address>/backup/', WalletBackupView.as_view(), name='wallet_backup'),
+    
+    # Forum API endpoints
+    path('api/forum/', include('forum.urls')),
+    
+    # Gaming API endpoints
+    path('api/gaming/', include('gaming.urls')),
 ]
 
 # Serve media files in development

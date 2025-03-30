@@ -1,0 +1,2105 @@
+<script>// Create bond visualization between two elements
+      const createBondModel = (element1, element2) => {
+        if (!sceneRef.current) return null;
+        
+        console.log(`Creating bond visualization between ${element1.name} and ${element2.name}`);
+        
+        // Remove old atom/bond model if it exists
+        if (atomModelRef.current) {
+          console.log("Removing old model");
+          sceneRef.current.remove(atomModelRef.current);
+          atomModelRef.current = null;
+        }
+        
+        // Create new group for the bond model
+        const bondGroup = new THREE.Group();
+        console.log("Created new bond group");
+        
+        // Scale factor for visualization
+        const scale = 1.0;
+        
+        // Get bond information - try to use imported BondCalculator first
+        let bondInfo;
+        if (typeof BondCalculator !== 'undefined' && typeof BondTypes !== 'undefined') {
+          console.log("Using imported BondCalculator");
+          
+          // Calculate electronegativity difference
+          const electronegativityValues = {
+            1: 2.20, 2: 0.00, 3: 0.98, 4: 1.57, 5: 2.04, 6: 2.55, 7: 3.04, 8: 3.44, 9: 3.98, 10: 0.00,
+            11: 0.93, 12: 1.31, 13: 1.61, 14: 1.90, 15: 2.19, 16: 2.58, 17: 3.16, 18: 0.00, 19: 0.82, 20: 1.00,
+            // Partial list for brevity
+          };
+          
+          const diffEN = Math.abs(
+            (electronegativityValues[element1.number] || 0) - 
+            (electronegativityValues[element2.number] || 0)
+          );
+          
+          bondInfo = BondCalculator.determineBondType(element1.number, element2.number, diffEN);
+          console.log("Bond type from imported calculator:", bondInfo);
+        } else {
+          // Fall back to built-in method
+          bondInfo = determineBondType(element1.number, element2.number);
+          console.log("Bond type from built-in method:", bondInfo);
+        }
+        
+        // Convert hex color to THREE.js color
+        const bondColor = new THREE.Color(bondInfo.color);
+        
+        // Create two atoms with distance based on bond type
+        // Ionic bonds are longer than covalent bonds
+        let bondDistance = 20;
+        if (bondInfo.type.includes("covalent")) {
+          bondDistance = 15;
+        } else if (bondInfo.type.includes("metallic")) {
+          bondDistance = 18;
+        } else if (bondInfo.type.includes("hydrogen")) {
+          bondDistance = 22;
+        } else if (bondInfo.type.includes("Van der Waals")) {
+          bondDistance = 25;
+        } else if (bondInfo.type.includes("Three-center")) {
+          bondDistance = 16;
+        }
+        
+        // Create first atom (left)
+        const atom1Geometry = new THREE.SphereGeometry(5 * scale, 32, 32);
+        const atom1Material = new THREE.MeshPhongMaterial({ 
+          color: getCategoryColor(element1.category),
+          emissive: 0x222222,
+          specular: 0xFFFFFF,
+          shininess: 30
+        });
+        
+        const atom1 = new THREE.Mesh(atom1Geometry, atom1Material);
+        atom1.position.set(-bondDistance/2, 0, 0);
+        bondGroup.add(atom1);
+        
+        // Add element symbol to first atom
+        const element1Text = createTextMesh(element1.symbol, 3, 0xFFFFFF);
+        element1Text.position.set(-bondDistance/2, -8, 0);
+        bondGroup.add(element1Text);
+        
+        // Create second atom (right)
+        const atom2Geometry = new THREE.SphereGeometry(5 * scale, 32, 32);
+        const atom2Material = new THREE.MeshPhongMaterial({ 
+          color: getCategoryColor(element2.category),
+          emissive: 0x222222,
+          specular: 0xFFFFFF,
+          shininess: 30
+        });
+        
+        const atom2 = new THREE.Mesh(atom2Geometry, atom2Material);
+        atom2.position.set(bondDistance/2, 0, 0);
+        bondGroup.add(atom2);
+        
+        // Add element symbol to second atom
+        const element2Text = createTextMesh(element2.symbol, 3, 0xFFFFFF);
+        element2Text.position.set(bondDistance/2, -8, 0);
+        bondGroup.add(element2Text);
+        
+        // Create actual bond visualization based on type
+        if (bondInfo.type.includes("Ionic")) {
+          createIonicBondVisualization(bondGroup, bondDistance, bondColor);
+        } else if (bondInfo.type.includes("Pure covalent")) {
+          createPureCovalentBondVisualization(bondGroup, bondDistance, bondColor);
+        } else if (bondInfo.type.includes("Polar covalent")) {
+          createPolarCovalentBondVisualization(bondGroup, bondDistance, bondColor, element1, element2);
+        } else if (bondInfo.type.includes("Metallic")) {
+          createMetallicBondVisualization(bondGroup, bondDistance, bondColor);
+        } else if (bondInfo.type.includes("Hydrogen")) {
+          createHydrogenBondVisualization(bondGroup, bondDistance, bondColor, element1, element2);
+        } else if (bondInfo.type.includes("Van der Waals")) {
+          createVanDerWaalsVisualization(bondGroup, bondDistance, bondColor);
+        } else if (bondInfo.type.includes("Coordinate")) {
+          createCoordinateCovalentVisualization(bondGroup, bondDistance, bondColor);
+        } else if (bondInfo.type.includes("Three-center")) {
+          createThreeCenterBondVisualization(bondGroup, bondDistance, bondColor);
+        } else if (bondInfo.type.includes("Pi")) {
+          createPiBondVisualization(bondGroup, bondDistance, bondColor);
+        } else {
+          // Generic unknown bond visualization
+          const bondLineGeometry = new THREE.CylinderGeometry(0.5, 0.5, bondDistance, 12);
+          bondLineGeometry.rotateZ(Math.PI / 2);
+          
+          const bondLineMaterial = new THREE.MeshPhongMaterial({ 
+            color: bondColor,
+            transparent: true,
+            opacity: 0.7
+          });
+          
+          const bondLine = new THREE.Mesh(bondLineGeometry, bondLineMaterial);
+          bondGroup.add(bondLine);
+        }
+        
+        // Add bond type label
+        const bondTypeText = createTextMesh(bondInfo.type, 3, bondColor);
+        bondTypeText.position.set(0, -14, 0);
+        bondGroup.add(bondTypeText);
+        
+        // Add to scene and set as current model
+        sceneRef.current.add(bondGroup);
+        atomModelRef.current = bondGroup;
+        
+        // Make sure it's positioned at the origin (0,0,0)
+        bondGroup.position.set(0, 0, 0);
+        
+        // Make sure it's visible
+        bondGroup.visible = true;
+        
+        console.log("Added bond model to scene");
+        
+        return bondGroup;
+      };
+      
+      // Helper functions for different bond visualizations
+      
+      const createIonicBondVisualization = (group, bondDistance, color) => {
+        // For ionic bonds, show electron transfer
+        // Add positive charge to first atom
+        const plus = createTextMesh("+", 3, 0xFFFFFF);
+        plus.position.set(-bondDistance/2, 6, 0);
+        group.add(plus);
+        
+        // Add negative charge to second atom
+        const minus = createTextMesh("-", 3, 0xFFFFFF);
+        minus.position.set(bondDistance/2, 6, 0);
+        group.add(minus);
+        
+        // Add electron being transferred (animated in animation loop)
+        const electronGeometry = new THREE.SphereGeometry(1.2, 16, 16);
+        const electronMaterial = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 100
+        });
+        
+        const transferElectron = new THREE.Mesh(electronGeometry, electronMaterial);
+        transferElectron.position.set(-bondDistance/4, 0, 0);
+        transferElectron.userData.isTransferElectron = true;
+        transferElectron.userData.startPosition = new THREE.Vector3(-bondDistance/4, 0, 0);
+        transferElectron.userData.endPosition = new THREE.Vector3(bondDistance/4, 0, 0);
+        group.add(transferElectron);
+      };
+      
+      const createPureCovalentBondVisualization = (group, bondDistance, color) => {
+        // For pure covalent bonds, show shared electrons
+        // Show shared orbital
+        const sharedOrbitalGeometry = new THREE.SphereGeometry(3, 32, 16);
+        const sharedOrbitalMaterial = new THREE.MeshPhongMaterial({ 
+          color: color,
+          transparent: true,
+          opacity: 0.5,
+          shininess: 10
+        });
+        
+        const sharedOrbital = new THREE.Mesh(sharedOrbitalGeometry, sharedOrbitalMaterial);
+        sharedOrbital.position.set(0, 0, 0);
+        sharedOrbital.scale.set(3, 1, 1); // Elongate to cover the bond area
+        group.add(sharedOrbital);
+        
+        // Add shared electrons
+        const electron1Geometry = new THREE.SphereGeometry(1.0, 16, 16);
+        const electron1Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const electron2Geometry = new THREE.SphereGeometry(1.0, 16, 16);
+        const electron2Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const sharedElectron1 = new THREE.Mesh(electron1Geometry, electron1Material);
+        const sharedElectron2 = new THREE.Mesh(electron2Geometry, electron2Material);
+        
+        // Position electrons in the shared space equally
+        sharedElectron1.position.set(-1, 2, 0);
+        sharedElectron2.position.set(1, -2, 0);
+        
+        // Add animation properties to electrons
+        sharedElectron1.userData.isSharedElectron = true;
+        sharedElectron2.userData.isSharedElectron = true;
+        
+        group.add(sharedElectron1);
+        group.add(sharedElectron2);
+      };
+      
+      const createPolarCovalentBondVisualization = (group, bondDistance, color, element1, element2) => {
+        // Get electronegativity values
+        const electronegativityValues = {
+          1: 2.20, 2: 0.00, 3: 0.98, 4: 1.57, 5: 2.04, 6: 2.55, 7: 3.04, 8: 3.44, 9: 3.98, 10: 0.00,
+          11: 0.93, 12: 1.31, 13: 1.61, 14: 1.90, 15: 2.19, 16: 2.58, 17: 3.16, 18: 0.00, 19: 0.82, 20: 1.00
+          // Partial list for brevity
+        };
+        
+        const element1EN = electronegativityValues[element1.number] || 1.5;
+        const element2EN = electronegativityValues[element2.number] || 1.5;
+        
+        // For polar covalent bonds, show unequal sharing
+        // Show shared orbital (slightly skewed)
+        const sharedOrbitalGeometry = new THREE.SphereGeometry(3, 32, 16);
+        const sharedOrbitalMaterial = new THREE.MeshPhongMaterial({ 
+          color: color,
+          transparent: true,
+          opacity: 0.5,
+          shininess: 10
+        });
+        
+        const sharedOrbital = new THREE.Mesh(sharedOrbitalGeometry, sharedOrbitalMaterial);
+        
+        // Position the orbital closer to the more electronegative atom
+        if (element1EN > element2EN) {
+          sharedOrbital.position.set(-bondDistance/6, 0, 0);
+        } else {
+          sharedOrbital.position.set(bondDistance/6, 0, 0);
+        }
+        
+        sharedOrbital.scale.set(3, 1, 1); // Elongate to cover the bond area
+        group.add(sharedOrbital);
+        
+        // Add shared electrons
+        const electron1Geometry = new THREE.SphereGeometry(1.0, 16, 16);
+        const electron1Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const electron2Geometry = new THREE.SphereGeometry(1.0, 16, 16);
+        const electron2Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const sharedElectron1 = new THREE.Mesh(electron1Geometry, electron1Material);
+        const sharedElectron2 = new THREE.Mesh(electron2Geometry, electron2Material);
+        
+        // Position electrons in the shared space, but closer to more electronegative atom
+        if (element1EN > element2EN) {
+          sharedElectron1.position.set(-2, 2, 0);
+          sharedElectron2.position.set(-1, -2, 0);
+        } else {
+          sharedElectron1.position.set(2, 2, 0);
+          sharedElectron2.position.set(1, -2, 0);
+        }
+        
+        // Add animation properties to electrons
+        sharedElectron1.userData.isSharedElectron = true;
+        sharedElectron2.userData.isSharedElectron = true;
+        
+        group.add(sharedElectron1);
+        group.add(sharedElectron2);
+        
+        // Add dipole indicators (δ+ and δ-)
+        const deltaPlus = createTextMesh("δ+", 2, 0xFFFFFF);
+        const deltaMinus = createTextMesh("δ-", 2, 0xFFFFFF);
+        
+        if (element1EN > element2EN) {
+          deltaMinus.position.set(-bondDistance/2 - 3, 4, 0);
+          deltaPlus.position.set(bondDistance/2 + 3, 4, 0);
+        } else {
+          deltaPlus.position.set(-bondDistance/2 - 3, 4, 0);
+          deltaMinus.position.set(bondDistance/2 + 3, 4, 0);
+        }
+        
+        group.add(deltaPlus);
+        group.add(deltaMinus);
+      };
+      
+      const createMetallicBondVisualization = (group, bondDistance, color) => {
+        // For metallic bonds, show electron sea
+        // Create a "sea of electrons" between and around the atoms
+        const electronSeaGeometry = new THREE.BoxGeometry(bondDistance + 10, 10, 10);
+        const electronSeaMaterial = new THREE.MeshPhongMaterial({ 
+          color: color,
+          transparent: true,
+          opacity: 0.3,
+          shininess: 100
+        });
+        
+        const electronSea = new THREE.Mesh(electronSeaGeometry, electronSeaMaterial);
+        electronSea.position.set(0, 0, 0);
+        group.add(electronSea);
+        
+        // Add multiple free electrons in the sea
+        for (let i = 0; i < 10; i++) {
+          const freeElectronGeometry = new THREE.SphereGeometry(0.8, 12, 12);
+          const freeElectronMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x00FFFF,
+            emissive: 0x00FFFF,
+            shininess: 100
+          });
+          
+          const freeElectron = new THREE.Mesh(freeElectronGeometry, freeElectronMaterial);
+          
+          // Random position within the electron sea
+          const x = (Math.random() * bondDistance) - bondDistance/2;
+          const y = (Math.random() * 8) - 4;
+          const z = (Math.random() * 8) - 4;
+          
+          freeElectron.position.set(x, y, z);
+          freeElectron.userData.isFreeElectron = true;
+          freeElectron.userData.originalPosition = new THREE.Vector3(x, y, z);
+          freeElectron.userData.speed = Math.random() * 0.05 + 0.02;
+          freeElectron.userData.direction = Math.random() > 0.5 ? 1 : -1;
+          
+          group.add(freeElectron);
+        }
+      };
+      
+      const createHydrogenBondVisualization = (group, bondDistance, color, element1, element2) => {
+        // For hydrogen bonds, show the dipole-dipole interaction
+        const bondLineGeometry = new THREE.CylinderGeometry(0.5, 0.5, bondDistance, 12);
+        const bondLineMaterial = new THREE.MeshPhongMaterial({ 
+          color: color,
+          transparent: true,
+          opacity: 0.7,
+          shininess: 30
+        });
+        
+        // Rotate cylinder to lie on x-axis
+        bondLineGeometry.rotateZ(Math.PI / 2);
+        
+        const bondLine = new THREE.Mesh(bondLineGeometry, bondLineMaterial);
+        bondLine.position.set(0, 0, 0);
+        group.add(bondLine);
+        
+        // Add dipole indicators (δ+ and δ-)
+        const deltaPlus = createTextMesh("δ+", 2, 0xFFFFFF);
+        const deltaMinus = createTextMesh("δ-", 2, 0xFFFFFF);
+        
+        // Position the dipole indicators - assumes H is element1 or element2
+        if (element1.number === 1) {
+          deltaPlus.position.set(-bondDistance/2 - 3, 4, 0);
+          deltaMinus.position.set(bondDistance/2 + 3, 4, 0);
+        } else if (element2.number === 1) {
+          deltaMinus.position.set(-bondDistance/2 - 3, 4, 0);
+          deltaPlus.position.set(bondDistance/2 + 3, 4, 0);
+        } else {
+          // In case neither is hydrogen, place them arbitrarily
+          deltaPlus.position.set(-bondDistance/2 - 3, 4, 0);
+          deltaMinus.position.set(bondDistance/2 + 3, 4, 0);
+        }
+        
+        group.add(deltaPlus);
+        group.add(deltaMinus);
+      };
+      
+      const createVanDerWaalsVisualization = (group, bondDistance, color) => {
+        // For van der Waals forces, show weak attraction
+        // Create a dotted line to represent weak interaction
+        for (let i = -bondDistance/2 + 2; i < bondDistance/2; i += 2) {
+          const dotGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+          const dotMaterial = new THREE.MeshPhongMaterial({ 
+            color: color,
+            shininess: 30
+          });
+          
+          const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+          dot.position.set(i, 0, 0);
+          group.add(dot);
+        }
+        
+        // Add weak interaction label
+        const weakLabel = createTextMesh("Weak Force", 2, color);
+        weakLabel.position.set(0, 7, 0);
+        group.add(weakLabel);
+      };
+      
+      const createCoordinateCovalentVisualization = (group, bondDistance, color) => {
+        // For coordinate covalent bonds, show that both electrons come from one atom
+        const bondLineGeometry = new THREE.CylinderGeometry(0.7, 0.7, bondDistance, 12);
+        bondLineGeometry.rotateZ(Math.PI / 2);
+        
+        const bondLineMaterial = new THREE.MeshPhongMaterial({ 
+          color: color,
+          shininess: 30
+        });
+        
+        const bondLine = new THREE.Mesh(bondLineGeometry, bondLineMaterial);
+        bondLine.position.set(0, 0, 0);
+        group.add(bondLine);
+        
+        // Add arrow to show direction
+        const arrowGeometry = new THREE.ConeGeometry(1, 2, 12);
+        arrowGeometry.rotateZ(-Math.PI / 2);
+        
+        const arrowMaterial = new THREE.MeshPhongMaterial({ 
+          color: color,
+          shininess: 30
+        });
+        
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        arrow.position.set(bondDistance/4, 0, 0);
+        group.add(arrow);
+        
+        // Add both electrons near one atom
+        const electron1Geometry = new THREE.SphereGeometry(0.8, 12, 12);
+        const electron1Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const electron2Geometry = new THREE.SphereGeometry(0.8, 12, 12);
+        const electron2Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const electron1 = new THREE.Mesh(electron1Geometry, electron1Material);
+        const electron2 = new THREE.Mesh(electron2Geometry, electron2Material);
+        
+        electron1.position.set(-bondDistance/2 + 3, 2, 0);
+        electron2.position.set(-bondDistance/2 + 3, -2, 0);
+        
+        electron1.userData.isSharedElectron = true;
+        electron2.userData.isSharedElectron = true;
+        
+        group.add(electron1);
+        group.add(electron2);
+      };
+      
+      const createThreeCenterBondVisualization = (group, bondDistance, color) => {
+        // For three-center two-electron bonds, show shared electrons across three centers
+        // First, add a third "atom" above the other two
+        const atom3Geometry = new THREE.SphereGeometry(3, 24, 24);
+        const atom3Material = new THREE.MeshPhongMaterial({ 
+          color: 0xC2FF00, // Assuming boron-like color
+          emissive: 0x222222,
+          specular: 0xFFFFFF,
+          shininess: 30
+        });
+        
+        const atom3 = new THREE.Mesh(atom3Geometry, atom3Material);
+        atom3.position.set(0, 10, 0);
+        group.add(atom3);
+        
+        // Add "B" symbol for the third atom (typically boron)
+        const element3Text = createTextMesh("B", 2, 0xFFFFFF);
+        element3Text.position.set(0, 14, 0);
+        group.add(element3Text);
+        
+        // Add connecting lines between all three atoms (forming a triangle)
+        const line1Geometry = new THREE.CylinderGeometry(0.4, 0.4, bondDistance, 8);
+        line1Geometry.rotateZ(Math.PI / 2);
+        
+        const line2Geometry = new THREE.CylinderGeometry(0.4, 0.4, 
+          Math.sqrt(bondDistance*bondDistance/4 + 10*10), 8);
+        line2Geometry.rotateZ(Math.PI/2 + Math.atan(10/(bondDistance/2)));
+        
+        const line3Geometry = new THREE.CylinderGeometry(0.4, 0.4, 
+          Math.sqrt(bondDistance*bondDistance/4 + 10*10), 8);
+        line3Geometry.rotateZ(Math.PI/2 - Math.atan(10/(bondDistance/2)));
+        
+        const lineMaterial = new THREE.MeshPhongMaterial({ 
+          color: color,
+          transparent: true,
+          opacity: 0.7,
+          shininess: 30
+        });
+        
+        const line1 = new THREE.Mesh(line1Geometry, lineMaterial);
+        const line2 = new THREE.Mesh(line2Geometry, lineMaterial);
+        const line3 = new THREE.Mesh(line3Geometry, lineMaterial);
+        
+        line1.position.set(0, 0, 0);
+        line2.position.set(-bondDistance/4, 5, 0);
+        line3.position.set(bondDistance/4, 5, 0);
+        
+        group.add(line1);
+        group.add(line2);
+        group.add(line3);
+        
+        // Add two electrons in the center of the triangle
+        const electron1Geometry = new THREE.SphereGeometry(1.0, 16, 16);
+        const electron1Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const electron2Geometry = new THREE.SphereGeometry(1.0, 16, 16);
+        const electron2Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const electron1 = new THREE.Mesh(electron1Geometry, electron1Material);
+        const electron2 = new THREE.Mesh(electron2Geometry, electron2Material);
+        
+        electron1.position.set(0, 4, 1);
+        electron2.position.set(0, 4, -1);
+        
+        electron1.userData.isSharedElectron = true;
+        electron2.userData.isSharedElectron = true;
+        
+        group.add(electron1);
+        group.add(electron2);
+      };
+      
+      const createPiBondVisualization = (group, bondDistance, color) => {
+        // For π bonds, show sigma + pi bond combination
+        // First create sigma bond (straight line)
+        const sigmaBondGeometry = new THREE.CylinderGeometry(0.6, 0.6, bondDistance, 12);
+        sigmaBondGeometry.rotateZ(Math.PI / 2);
+        
+        const sigmaBondMaterial = new THREE.MeshPhongMaterial({ 
+          color: 0x00FF00, // Green for sigma bond
+          shininess: 30
+        });
+        
+        const sigmaBond = new THREE.Mesh(sigmaBondGeometry, sigmaBondMaterial);
+        sigmaBond.position.set(0, 0, 0);
+        group.add(sigmaBond);
+        
+        // Create pi bond (above and below sigma bond)
+        const piBondGeometry1 = new THREE.CylinderGeometry(0.4, 0.4, bondDistance - 2, 12);
+        piBondGeometry1.rotateZ(Math.PI / 2);
+        
+        const piBondMaterial = new THREE.MeshPhongMaterial({ 
+          color: color,
+          shininess: 30
+        });
+        
+        const piBond1 = new THREE.Mesh(piBondGeometry1, piBondMaterial);
+        piBond1.position.set(0, 0, 2);
+        group.add(piBond1);
+        
+        const piBondGeometry2 = new THREE.CylinderGeometry(0.4, 0.4, bondDistance - 2, 12);
+        piBondGeometry2.rotateZ(Math.PI / 2);
+        
+        const piBond2 = new THREE.Mesh(piBondGeometry2, piBondMaterial);
+        piBond2.position.set(0, 0, -2);
+        group.add(piBond2);
+        
+        // Add orbital clouds
+        const orbital1Geometry = new THREE.SphereGeometry(1.5, 16, 16);
+        const orbital1Material = new THREE.MeshPhongMaterial({
+          color: color,
+          transparent: true,
+          opacity: 0.5,
+          shininess: 30
+        });
+        
+        const orbital2Geometry = new THREE.SphereGeometry(1.5, 16, 16);
+        const orbital2Material = new THREE.MeshPhongMaterial({
+          color: color,
+          transparent: true,
+          opacity: 0.5,
+          shininess: 30
+        });
+        
+        const orbital1 = new THREE.Mesh(orbital1Geometry, orbital1Material);
+        const orbital2 = new THREE.Mesh(orbital2Geometry, orbital2Material);
+        
+        orbital1.position.set(-bondDistance/4, 0, 2);
+        orbital2.position.set(bondDistance/4, 0, 2);
+        
+        orbital1.scale.set(2, 1, 0.7);
+        orbital2.scale.set(2, 1, 0.7);
+        
+        group.add(orbital1);
+        group.add(orbital2);
+        
+        // Add electrons in the pi orbitals
+        const electron1Geometry = new THREE.SphereGeometry(0.7, 12, 12);
+        const electron1Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const electron2Geometry = new THREE.SphereGeometry(0.7, 12, 12);
+        const electron2Material = new THREE.MeshPhongMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          shininess: 80
+        });
+        
+        const electron1 = new THREE.Mesh(electron1Geometry, electron1Material);
+        const electron2 = new THREE.Mesh(electron2Geometry, electron2Material);
+        
+        electron1.position.set(-bondDistance/4, 0, 2);
+        electron2.position.set(bondDistance/4, 0, 2);
+        
+        electron1.userData.isSharedElectron = true;
+        electron2.userData.isSharedElectron = true;
+        
+        group.add(electron1);
+        group.add(electron2);
+        
+        // Add "σ + π" label
+        const bondLabel = createTextMesh("σ + π", 2, 0xFFFFFF);
+        bondLabel.position.set(0, 7, 0);
+        group.add(bondLabel);
+      };      // Create bond visualization between two elements
+      // Helper function to create text meshes
+      const createTextMesh = (text, size, color) => {
+        // Since we can't use TextGeometry directly in this environment,
+        // we'll substitute it with a simple plane with text texture
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = 256;
+        canvas.height = 256;
+        
+        // Draw text on canvas
+        context.fillStyle = '#FFFFFF';
+        context.font = 'Bold 80px Arial';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText(text, 128, 128);
+        
+        // Create texture from canvas
+        const texture = new THREE.CanvasTexture(canvas);
+        
+        // Create material with the texture
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          color: new THREE.Color(color)
+        });
+        
+        // Create plane geometry
+        const geometry = new THREE.PlaneGeometry(size * text.length, size);
+        
+        // Create mesh
+        return new THREE.Mesh(geometry, material);
+      };
+      
+      // Helper function to get electronegativity
+      const getElectronegativity = (atomicNumber) => {
+        // Electronegativity values (Pauling scale)
+        const values = {
+          1: 2.20, // H
+          2: 0.00, // He (noble gas)
+          3: 0.98, // Li
+          4: 1.57, // Be
+          5: 2.04, // B
+          6: 2.55, // C
+          7: 3.04, // N
+          8: 3.44, // O
+          9: 3.98, // F
+          10: 0.00, // Ne
+          11: 0.93, // Na
+          12: 1.31, // Mg
+          13: 1.61, // Al
+          14: 1.90, // Si
+          15: 2.19, // P
+          16: 2.58, // S
+          17: 3.16, // Cl
+          18: 0.00, // Ar
+          19: 0.82, // K
+          20: 1.00, // Ca
+          // ... (other values as needed)
+        };
+        
+        return values[atomicNumber] || 1.5; // Default value if not found
+      };
+    </script>      
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Interactive 3D Periodic Table</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
+    #root { width: 100%; height: 100%; }
+    .absolute { position: absolute; }
+    .bottom-0 { bottom: 0; }
+    .left-0 { left: 0; }
+    .right-0 { right: 0; }
+    .top-0 { top: 0; }
+    .bg-slate-800 { background-color: #1e293b; }
+    .text-white { color: white; }
+    .p-4 { padding: 1rem; }
+    .m-4 { margin: 1rem; }
+    .rounded-lg { border-radius: 0.5rem; }
+    .max-w-lg { max-width: 32rem; }
+    .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
+    .text-2xl { font-size: 1.5rem; }
+    .text-lg { font-size: 1.125rem; }
+    .font-bold { font-weight: 700; }
+    .font-semibold { font-weight: 600; }
+    .mb-1 { margin-bottom: 0.25rem; }
+    .mb-2 { margin-bottom: 0.5rem; }
+    .whitespace-pre-line { white-space: pre-line; }
+    .flex-col { display: flex; flex-direction: column; }
+    .w-full { width: 100%; }
+    .h-screen { height: 100vh; }
+    .flex-grow { flex-grow: 1; }
+    .bg-black { background-color: black; }
+    .bg-opacity-50 { background-color: rgba(0, 0, 0, 0.5); }
+    .rounded { border-radius: 0.25rem; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    // Use React from global variable instead of import
+    const { useState, useEffect, useRef } = React;
+    // THREE is already available as a global variable
+
+    // Element data - expanded version
+    const elements = [
+      // Period 1
+      { symbol: 'H', name: 'Hydrogen', number: 1, group: 1, period: 1, category: 'nonmetal', color: '#FFFFFF', description: 'Lightest element, most abundant in the universe', structure: 'One proton, one electron', interactions: {} },
+      { symbol: 'He', name: 'Helium', number: 2, group: 18, period: 1, category: 'noble', color: '#D9FFFF', description: 'Noble gas, used in balloons and cryogenics', structure: 'Two protons, two neutrons, two electrons', interactions: {} },
+      
+      // Period 2
+      { symbol: 'Li', name: 'Lithium', number: 3, group: 1, period: 2, category: 'alkali', color: '#CC80FF', description: 'Soft alkali metal, used in batteries', structure: 'Three protons, four neutrons, three electrons', interactions: {} },
+      { symbol: 'Be', name: 'Beryllium', number: 4, group: 2, period: 2, category: 'alkaline', color: '#C2FF00', description: 'Alkaline earth metal, relatively rare on Earth', structure: 'Four protons, five neutrons, four electrons', interactions: {} },
+      { symbol: 'B', name: 'Boron', number: 5, group: 13, period: 2, category: 'metalloid', color: '#FFB5B5', description: 'Metalloid used in borosilicate glass, semiconductors', structure: 'Five protons, six neutrons, five electrons', interactions: {} },
+      { symbol: 'C', name: 'Carbon', number: 6, group: 14, period: 2, category: 'nonmetal', color: '#909090', description: 'Basis of organic chemistry and life', structure: 'Six protons, six neutrons, six electrons', interactions: {} },
+      { symbol: 'N', name: 'Nitrogen', number: 7, group: 15, period: 2, category: 'nonmetal', color: '#3050F8', description: 'Major component of Earth\'s atmosphere', structure: 'Seven protons, seven neutrons, seven electrons', interactions: {} },
+      { symbol: 'O', name: 'Oxygen', number: 8, group: 16, period: 2, category: 'nonmetal', color: '#FF0D0D', description: 'Essential for respiration in animals', structure: 'Eight protons, eight neutrons, eight electrons', interactions: {} },
+      { symbol: 'F', name: 'Fluorine', number: 9, group: 17, period: 2, category: 'halogen', color: '#90E050', description: 'Most reactive non-metal, used in toothpaste', structure: 'Nine protons, ten neutrons, nine electrons', interactions: {} },
+      { symbol: 'Ne', name: 'Neon', number: 10, group: 18, period: 2, category: 'noble', color: '#B3E3F5', description: 'Noble gas used in signs, inert', structure: 'Ten protons, ten neutrons, ten electrons', interactions: {} },
+      
+      // Period 3
+      { symbol: 'Na', name: 'Sodium', number: 11, group: 1, period: 3, category: 'alkali', color: '#AB5CF2', description: 'Reactive alkali metal, essential for life', structure: 'Eleven protons, twelve neutrons, eleven electrons', interactions: {} },
+      { symbol: 'Mg', name: 'Magnesium', number: 12, group: 2, period: 3, category: 'alkaline', color: '#8AFF00', description: 'Alkaline earth metal, essential for plants', structure: 'Twelve protons, twelve neutrons, twelve electrons', interactions: {} },
+      { symbol: 'Al', name: 'Aluminum', number: 13, group: 13, period: 3, category: 'post-transition', color: '#BFA6A6', description: 'Lightweight metal, abundant in Earth\'s crust', structure: 'Thirteen protons, fourteen neutrons, thirteen electrons', interactions: {} },
+      { symbol: 'Si', name: 'Silicon', number: 14, group: 14, period: 3, category: 'metalloid', color: '#F0C8A0', description: 'Metalloid, basis for semiconductors and electronics', structure: 'Fourteen protons, fourteen neutrons, fourteen electrons', interactions: {} },
+      { symbol: 'P', name: 'Phosphorus', number: 15, group: 15, period: 3, category: 'nonmetal', color: '#FF8000', description: 'Essential for DNA, ATP and bones', structure: 'Fifteen protons, sixteen neutrons, fifteen electrons', interactions: {} },
+      { symbol: 'S', name: 'Sulfur', number: 16, group: 16, period: 3, category: 'nonmetal', color: '#FFFF30', description: 'Yellow nonmetal, component of amino acids', structure: 'Sixteen protons, sixteen neutrons, sixteen electrons', interactions: {} },
+      { symbol: 'Cl', name: 'Chlorine', number: 17, group: 17, period: 3, category: 'halogen', color: '#1FF01F', description: 'Toxic green gas, used for water purification', structure: 'Seventeen protons, eighteen neutrons, seventeen electrons', interactions: {} },
+      { symbol: 'Ar', name: 'Argon', number: 18, group: 18, period: 3, category: 'noble', color: '#80D1E3', description: 'Noble gas, used in lighting and as an inert atmosphere', structure: 'Eighteen protons, twenty-two neutrons, eighteen electrons', interactions: {} },
+      
+      // Period 4 (first row of transition metals)
+      { symbol: 'K', name: 'Potassium', number: 19, group: 1, period: 4, category: 'alkali', color: '#8F40D4', description: 'Reactive metal essential for nerve function', structure: 'Nineteen protons, twenty neutrons, nineteen electrons', interactions: {} },
+      { symbol: 'Ca', name: 'Calcium', number: 20, group: 2, period: 4, category: 'alkaline', color: '#3DFF00', description: 'Alkaline earth metal, key component of bones', structure: 'Twenty protons, twenty neutrons, twenty electrons', interactions: {} },
+      { symbol: 'Sc', name: 'Scandium', number: 21, group: 3, period: 4, category: 'transition', color: '#E6E6E6', description: 'Transition metal used in aerospace alloys', structure: 'Twenty-one protons, twenty-four neutrons, twenty-one electrons', interactions: {} },
+      { symbol: 'Ti', name: 'Titanium', number: 22, group: 4, period: 4, category: 'transition', color: '#BFC2C7', description: 'Strong, lightweight metal used in aerospace', structure: 'Twenty-two protons, twenty-six neutrons, twenty-two electrons', interactions: {} },
+      { symbol: 'V', name: 'Vanadium', number: 23, group: 5, period: 4, category: 'transition', color: '#A6A6AB', description: 'Hard transition metal used in steel alloys', structure: 'Twenty-three protons, twenty-eight neutrons, twenty-three electrons', interactions: {} },
+      { symbol: 'Cr', name: 'Chromium', number: 24, group: 6, period: 4, category: 'transition', color: '#8A99C7', description: 'Hard metal used for plating and stainless steel', structure: 'Twenty-four protons, twenty-eight neutrons, twenty-four electrons', interactions: {} },
+      { symbol: 'Mn', name: 'Manganese', number: 25, group: 7, period: 4, category: 'transition', color: '#9C7AC7', description: 'Brittle metal, essential trace nutrient', structure: 'Twenty-five protons, thirty neutrons, twenty-five electrons', interactions: {} },
+      { symbol: 'Fe', name: 'Iron', number: 26, group: 8, period: 4, category: 'transition', color: '#E06633', description: 'Most common element on Earth, forms steel', structure: 'Twenty-six protons, thirty neutrons, twenty-six electrons', interactions: {} },
+      { symbol: 'Co', name: 'Cobalt', number: 27, group: 9, period: 4, category: 'transition', color: '#F090A0', description: 'Transition metal used in magnets and alloys', structure: 'Twenty-seven protons, thirty-two neutrons, twenty-seven electrons', interactions: {} },
+      { symbol: 'Ni', name: 'Nickel', number: 28, group: 10, period: 4, category: 'transition', color: '#50D050', description: 'Transition metal used in coins and stainless steel', structure: 'Twenty-eight protons, thirty-one neutrons, twenty-eight electrons', interactions: {} },
+      { symbol: 'Cu', name: 'Copper', number: 29, group: 11, period: 4, category: 'transition', color: '#C88033', description: 'Excellent conductor of heat and electricity', structure: 'Twenty-nine protons, thirty-five neutrons, twenty-nine electrons', interactions: {} },
+      { symbol: 'Zn', name: 'Zinc', number: 30, group: 12, period: 4, category: 'transition', color: '#7D80B0', description: 'Essential for enzymes, used in galvanizing', structure: 'Thirty protons, thirty-five neutrons, thirty electrons', interactions: {} },
+      { symbol: 'Ga', name: 'Gallium', number: 31, group: 13, period: 4, category: 'post-transition', color: '#C28F8F', description: 'Metal that melts in your hand, used in electronics', structure: 'Thirty-one protons, thirty-nine neutrons, thirty-one electrons', interactions: {} },
+      { symbol: 'Ge', name: 'Germanium', number: 32, group: 14, period: 4, category: 'metalloid', color: '#668F8F', description: 'Metalloid semiconductor used in electronics', structure: 'Thirty-two protons, forty-one neutrons, thirty-two electrons', interactions: {} },
+      { symbol: 'As', name: 'Arsenic', number: 33, group: 15, period: 4, category: 'metalloid', color: '#BD80E3', description: 'Toxic metalloid used in semiconductors', structure: 'Thirty-three protons, forty-two neutrons, thirty-three electrons', interactions: {} },
+      { symbol: 'Se', name: 'Selenium', number: 34, group: 16, period: 4, category: 'nonmetal', color: '#FFA100', description: 'Essential trace element with semiconductor properties', structure: 'Thirty-four protons, forty-five neutrons, thirty-four electrons', interactions: {} },
+      { symbol: 'Br', name: 'Bromine', number: 35, group: 17, period: 4, category: 'halogen', color: '#A62929', description: 'Red-brown liquid halogen, used in flame retardants', structure: 'Thirty-five protons, forty-five neutrons, thirty-five electrons', interactions: {} },
+      { symbol: 'Kr', name: 'Krypton', number: 36, group: 18, period: 4, category: 'noble', color: '#5CB8D1', description: 'Noble gas used in lighting and lasers', structure: 'Thirty-six protons, forty-eight neutrons, thirty-six electrons', interactions: {} },
+      
+      // Period 5 (second row of transition metals)
+      { symbol: 'Rb', name: 'Rubidium', number: 37, group: 1, period: 5, category: 'alkali', color: '#702EB0', description: 'Soft, highly reactive alkali metal', structure: 'Thirty-seven protons, forty-nine neutrons, thirty-seven electrons', interactions: {} },
+      { symbol: 'Sr', name: 'Strontium', number: 38, group: 2, period: 5, category: 'alkaline', color: '#00FF00', description: 'Alkaline earth metal, used in fireworks for red color', structure: 'Thirty-eight protons, fifty neutrons, thirty-eight electrons', interactions: {} },
+      { symbol: 'Y', name: 'Yttrium', number: 39, group: 3, period: 5, category: 'transition', color: '#94FFFF', description: 'Silvery metal used in LEDs and lasers', structure: 'Thirty-nine protons, fifty neutrons, thirty-nine electrons', interactions: {} },
+      { symbol: 'Zr', name: 'Zirconium', number: 40, group: 4, period: 5, category: 'transition', color: '#94E0E0', description: 'Hard, corrosion-resistant metal used in nuclear reactors', structure: 'Forty protons, fifty-one neutrons, forty electrons', interactions: {} },
+      { symbol: 'Nb', name: 'Niobium', number: 41, group: 5, period: 5, category: 'transition', color: '#73C2C9', description: 'Soft, ductile metal used in superconducting materials', structure: 'Forty-one protons, fifty-two neutrons, forty-one electrons', interactions: {} },
+      { symbol: 'Mo', name: 'Molybdenum', number: 42, group: 6, period: 5, category: 'transition', color: '#54B5B5', description: 'High melting point metal, used in steel alloys', structure: 'Forty-two protons, fifty-four neutrons, forty-two electrons', interactions: {} },
+      { symbol: 'Tc', name: 'Technetium', number: 43, group: 7, period: 5, category: 'transition', color: '#3B9E9E', description: 'Radioactive element, used in medical imaging', structure: 'Forty-three protons, fifty-five neutrons, forty-three electrons', interactions: {} },
+      { symbol: 'Ru', name: 'Ruthenium', number: 44, group: 8, period: 5, category: 'transition', color: '#248F8F', description: 'Hard, rare transition metal used in electronics', structure: 'Forty-four protons, fifty-seven neutrons, forty-four electrons', interactions: {} },
+      { symbol: 'Rh', name: 'Rhodium', number: 45, group: 9, period: 5, category: 'transition', color: '#0A7D8C', description: 'Rare, reflective metal used in catalytic converters', structure: 'Forty-five protons, fifty-eight neutrons, forty-five electrons', interactions: {} },
+      { symbol: 'Pd', name: 'Palladium', number: 46, group: 10, period: 5, category: 'transition', color: '#006985', description: 'Rare precious metal used in catalysts and electronics', structure: 'Forty-six protons, sixty neutrons, forty-six electrons', interactions: {} },
+      { symbol: 'Ag', name: 'Silver', number: 47, group: 11, period: 5, category: 'transition', color: '#C0C0C0', description: 'Excellent conductor, used in jewelry and electronics', structure: 'Forty-seven protons, sixty-one neutrons, forty-seven electrons', interactions: {} },
+      { symbol: 'Cd', name: 'Cadmium', number: 48, group: 12, period: 5, category: 'transition', color: '#FFD98F', description: 'Soft, bluish-white metal, toxic, used in batteries', structure: 'Forty-eight protons, sixty-four neutrons, forty-eight electrons', interactions: {} },
+      { symbol: 'In', name: 'Indium', number: 49, group: 13, period: 5, category: 'post-transition', color: '#A67573', description: 'Soft metal used in semiconductors and touch screens', structure: 'Forty-nine protons, sixty-six neutrons, forty-nine electrons', interactions: {} },
+      { symbol: 'Sn', name: 'Tin', number: 50, group: 14, period: 5, category: 'post-transition', color: '#668080', description: 'Malleable metal used in solders and tin plating', structure: 'Fifty protons, sixty-nine neutrons, fifty electrons', interactions: {} },
+      { symbol: 'Sb', name: 'Antimony', number: 51, group: 15, period: 5, category: 'metalloid', color: '#9E63B5', description: 'Metalloid used in flame retardants and semiconductors', structure: 'Fifty-one protons, seventy-one neutrons, fifty-one electrons', interactions: {} },
+      { symbol: 'Te', name: 'Tellurium', number: 52, group: 16, period: 5, category: 'metalloid', color: '#D47A00', description: 'Rare metalloid used in solar cells and electronics', structure: 'Fifty-two protons, seventy-six neutrons, fifty-two electrons', interactions: {} },
+      { symbol: 'I', name: 'Iodine', number: 53, group: 17, period: 5, category: 'halogen', color: '#940094', description: 'Dark purple solid halogen, essential for thyroid function', structure: 'Fifty-three protons, seventy-four neutrons, fifty-three electrons', interactions: {} },
+      { symbol: 'Xe', name: 'Xenon', number: 54, group: 18, period: 5, category: 'noble', color: '#429EB0', description: 'Noble gas used in lighting and as anesthetic', structure: 'Fifty-four protons, seventy-seven neutrons, fifty-four electrons', interactions: {} },
+      
+      // Period 6
+      { symbol: 'Cs', name: 'Cesium', number: 55, group: 1, period: 6, category: 'alkali', color: '#57178F', description: 'Soft, gold-colored metal, used in atomic clocks', structure: 'Fifty-five protons, seventy-eight neutrons, fifty-five electrons', interactions: {} },
+      { symbol: 'Ba', name: 'Barium', number: 56, group: 2, period: 6, category: 'alkaline', color: '#00C900', description: 'Soft alkaline earth metal, used in medical imaging', structure: 'Fifty-six protons, eighty-one neutrons, fifty-six electrons', interactions: {} },
+      
+      // Lanthanide Series
+      { symbol: 'La', name: 'Lanthanum', number: 57, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'First element in the lanthanide series, used in catalysts', structure: 'Fifty-seven protons, eighty-two neutrons, fifty-seven electrons', interactions: {} },
+      { symbol: 'Ce', name: 'Cerium', number: 58, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Most abundant rare earth metal, used in catalytic converters', structure: 'Fifty-eight protons, eighty-two neutrons, fifty-eight electrons', interactions: {} },
+      { symbol: 'Pr', name: 'Praseodymium', number: 59, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth metal used in magnets and special glasses', structure: 'Fifty-nine protons, eighty-two neutrons, fifty-nine electrons', interactions: {} },
+      { symbol: 'Nd', name: 'Neodymium', number: 60, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth used in powerful magnets', structure: 'Sixty protons, eighty-four neutrons, sixty electrons', interactions: {} },
+      { symbol: 'Pm', name: 'Promethium', number: 61, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Radioactive rare earth metal, all isotopes are radioactive', structure: 'Sixty-one protons, eighty-four neutrons, sixty-one electrons', interactions: {} },
+      { symbol: 'Sm', name: 'Samarium', number: 62, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth used in magnets and cancer treatments', structure: 'Sixty-two protons, eighty-eight neutrons, sixty-two electrons', interactions: {} },
+      { symbol: 'Eu', name: 'Europium', number: 63, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Highly reactive rare earth used in phosphors for displays', structure: 'Sixty-three protons, eighty-nine neutrons, sixty-three electrons', interactions: {} },
+      { symbol: 'Gd', name: 'Gadolinium', number: 64, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth with unique magnetic properties', structure: 'Sixty-four protons, ninety-three neutrons, sixty-four electrons', interactions: {} },
+      { symbol: 'Tb', name: 'Terbium', number: 65, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth used in solid-state devices and fuel cells', structure: 'Sixty-five protons, ninety-four neutrons, sixty-five electrons', interactions: {} },
+      { symbol: 'Dy', name: 'Dysprosium', number: 66, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth used in lasers and nuclear reactor control rods', structure: 'Sixty-six protons, ninety-seven neutrons, sixty-six electrons', interactions: {} },
+      { symbol: 'Ho', name: 'Holmium', number: 67, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth with highest magnetic strength', structure: 'Sixty-seven protons, ninety-eight neutrons, sixty-seven electrons', interactions: {} },
+      { symbol: 'Er', name: 'Erbium', number: 68, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth used in fiber optics and metal alloys', structure: 'Sixty-eight protons, ninety-nine neutrons, sixty-eight electrons', interactions: {} },
+      { symbol: 'Tm', name: 'Thulium', number: 69, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Least abundant rare earth in Earth\'s crust', structure: 'Sixty-nine protons, one-hundred neutrons, sixty-nine electrons', interactions: {} },
+      { symbol: 'Yb', name: 'Ytterbium', number: 70, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Rare earth used in portable X-ray machines', structure: 'Seventy protons, one-hundred and three neutrons, seventy electrons', interactions: {} },
+      { symbol: 'Lu', name: 'Lutetium', number: 71, group: 3, period: 6, category: 'lanthanoid', color: '#70D4FF', description: 'Last element in the lanthanide series, used in petroleum refining', structure: 'Seventy-one protons, one-hundred and four neutrons, seventy-one electrons', interactions: {} },
+      
+      // Remaining Period 6 elements
+      { symbol: 'Hf', name: 'Hafnium', number: 72, group: 4, period: 6, category: 'transition', color: '#4DC2FF', description: 'Corrosion-resistant metal used in nuclear reactors', structure: 'Seventy-two protons, one-hundred and six neutrons, seventy-two electrons', interactions: {} },
+      { symbol: 'Ta', name: 'Tantalum', number: 73, group: 5, period: 6, category: 'transition', color: '#4DA6FF', description: 'Hard, blue-gray metal used in electronic components', structure: 'Seventy-three protons, one-hundred and eight neutrons, seventy-three electrons', interactions: {} },
+      { symbol: 'W', name: 'Tungsten', number: 74, group: 6, period: 6, category: 'transition', color: '#2194D6', description: 'Extremely hard metal with highest melting point', structure: 'Seventy-four protons, one-hundred and ten neutrons, seventy-four electrons', interactions: {} },
+      { symbol: 'Re', name: 'Rhenium', number: 75, group: 7, period: 6, category: 'transition', color: '#267DAB', description: 'Dense metal with high melting point used in superalloys', structure: 'Seventy-five protons, one-hundred and eleven neutrons, seventy-five electrons', interactions: {} },
+      { symbol: 'Os', name: 'Osmium', number: 76, group: 8, period: 6, category: 'transition', color: '#266696', description: 'Bluish-white, extremely dense transition metal', structure: 'Seventy-six protons, one-hundred and fourteen neutrons, seventy-six electrons', interactions: {} },
+      { symbol: 'Ir', name: 'Iridium', number: 77, group: 9, period: 6, category: 'transition', color: '#175487', description: 'Dense, brittle, corrosion-resistant metal', structure: 'Seventy-seven protons, one-hundred and fifteen neutrons, seventy-seven electrons', interactions: {} },
+      { symbol: 'Pt', name: 'Platinum', number: 78, group: 10, period: 6, category: 'transition', color: '#D0D0E0', description: 'Precious metal used in catalysts and jewelry', structure: 'Seventy-eight protons, one-hundred and seventeen neutrons, seventy-eight electrons', interactions: {} },
+      { symbol: 'Au', name: 'Gold', number: 79, group: 11, period: 6, category: 'transition', color: '#FFD123', description: 'Precious metal used in jewelry, electronics and finance', structure: 'Seventy-nine protons, one-hundred and eighteen neutrons, seventy-nine electrons', interactions: {} },
+      { symbol: 'Hg', name: 'Mercury', number: 80, group: 12, period: 6, category: 'transition', color: '#B8B8D0', description: 'Liquid metal at room temperature, toxic', structure: 'Eighty protons, one-hundred and twenty-one neutrons, eighty electrons', interactions: {} },
+      { symbol: 'Tl', name: 'Thallium', number: 81, group: 13, period: 6, category: 'post-transition', color: '#A6544D', description: 'Soft, malleable toxic metal used in electronics', structure: 'Eighty-one protons, one-hundred and twenty-three neutrons, eighty-one electrons', interactions: {} },
+      { symbol: 'Pb', name: 'Lead', number: 82, group: 14, period: 6, category: 'post-transition', color: '#575961', description: 'Dense, soft metal, toxic to humans', structure: 'Eighty-two protons, one-hundred and twenty-six neutrons, eighty-two electrons', interactions: {} },
+      { symbol: 'Bi', name: 'Bismuth', number: 83, group: 15, period: 6, category: 'post-transition', color: '#9E4FB5', description: 'Brittle metal with low toxicity, used in cosmetics', structure: 'Eighty-three protons, one-hundred and twenty-six neutrons, eighty-three electrons', interactions: {} },
+      { symbol: 'Po', name: 'Polonium', number: 84, group: 16, period: 6, category: 'metalloid', color: '#AB5C00', description: 'Radioactive metalloid, extremely rare', structure: 'Eighty-four protons, one-hundred and twenty-five neutrons, eighty-four electrons', interactions: {} },
+      { symbol: 'At', name: 'Astatine', number: 85, group: 17, period: 6, category: 'halogen', color: '#754F45', description: 'Rarest naturally occurring element, highly radioactive', structure: 'Eighty-five protons, one-hundred and twenty-five neutrons, eighty-five electrons', interactions: {} },
+      { symbol: 'Rn', name: 'Radon', number: 86, group: 18, period: 6, category: 'noble', color: '#428296', description: 'Radioactive noble gas, health hazard in buildings', structure: 'Eighty-six protons, one-hundred and thirty-six neutrons, eighty-six electrons', interactions: {} },
+      
+      // Period 7
+      { symbol: 'Fr', name: 'Francium', number: 87, group: 1, period: 7, category: 'alkali', color: '#420066', description: 'Extremely rare, highly radioactive alkali metal', structure: 'Eighty-seven protons, one-hundred and thirty-six neutrons, eighty-seven electrons', interactions: {} },
+      { symbol: 'Ra', name: 'Radium', number: 88, group: 2, period: 7, category: 'alkaline', color: '#007D00', description: 'Radioactive, luminescent alkaline earth metal', structure: 'Eighty-eight protons, one-hundred and thirty-eight neutrons, eighty-eight electrons', interactions: {} },
+      
+      // Actinide Series
+      { symbol: 'Ac', name: 'Actinium', number: 89, group: 3, period: 7, category: 'actinoid', color: '#70ABFA', description: 'Radioactive metal, first element in the actinide series', structure: 'Eighty-nine protons, one-hundred and thirty-eight neutrons, eighty-nine electrons', interactions: {} },
+      { symbol: 'Th', name: 'Thorium', number: 90, group: 3, period: 7, category: 'actinoid', color: '#00BAFF', description: 'Radioactive metal used in nuclear fuel', structure: 'Ninety protons, one-hundred and forty-two neutrons, ninety electrons', interactions: {} },
+      { symbol: 'Pa', name: 'Protactinium', number: 91, group: 3, period: 7, category: 'actinoid', color: '#00A1FF', description: 'Highly radioactive, rare actinide metal', structure: 'Ninety-one protons, one-hundred and forty neutrons, ninety-one electrons', interactions: {} },
+      { symbol: 'U', name: 'Uranium', number: 92, group: 3, period: 7, category: 'actinoid', color: '#008FFF', description: 'Radioactive metal used for nuclear energy and weapons', structure: 'Ninety-two protons, one-hundred and forty-six neutrons, ninety-two electrons', interactions: {} },
+      { symbol: 'Np', name: 'Neptunium', number: 93, group: 3, period: 7, category: 'actinoid', color: '#0080FF', description: 'Synthetic radioactive actinide element', structure: 'Ninety-three protons, one-hundred and forty-four neutrons, ninety-three electrons', interactions: {} },
+      { symbol: 'Pu', name: 'Plutonium', number: 94, group: 3, period: 7, category: 'actinoid', color: '#006BFF', description: 'Radioactive metal used in nuclear weapons and reactors', structure: 'Ninety-four protons, one-hundred and fifty neutrons, ninety-four electrons', interactions: {} },
+      { symbol: 'Am', name: 'Americium', number: 95, group: 3, period: 7, category: 'actinoid', color: '#545CF2', description: 'Synthetic radioactive element used in smoke detectors', structure: 'Ninety-five protons, one-hundred and forty-eight neutrons, ninety-five electrons', interactions: {} },
+      { symbol: 'Cm', name: 'Curium', number: 96, group: 3, period: 7, category: 'actinoid', color: '#785CE3', description: 'Synthetic radioactive element named after Marie Curie', structure: 'Ninety-six protons, one-hundred and fifty-one neutrons, ninety-six electrons', interactions: {} },
+      { symbol: 'Bk', name: 'Berkelium', number: 97, group: 3, period: 7, category: 'actinoid', color: '#8A4FE3', description: 'Synthetic element named after Berkeley, California', structure: 'Ninety-seven protons, one-hundred and fifty neutrons, ninety-seven electrons', interactions: {} },
+      { symbol: 'Cf', name: 'Californium', number: 98, group: 3, period: 7, category: 'actinoid', color: '#A136D4', description: 'Synthetic radioactive element used in neutron sources', structure: 'Ninety-eight protons, one-hundred and fifty-three neutrons, ninety-eight electrons', interactions: {} },
+      { symbol: 'Es', name: 'Einsteinium', number: 99, group: 3, period: 7, category: 'actinoid', color: '#B31FD4', description: 'Synthetic element named after Albert Einstein', structure: 'Ninety-nine protons, one-hundred and fifty-three neutrons, ninety-nine electrons', interactions: {} },
+      { symbol: 'Fm', name: 'Fermium', number: 100, group: 3, period: 7, category: 'actinoid', color: '#B31FBA', description: 'Synthetic element named after Enrico Fermi', structure: 'One-hundred protons, one-hundred and fifty-seven neutrons, one-hundred electrons', interactions: {} },
+      { symbol: 'Md', name: 'Mendelevium', number: 101, group: 3, period: 7, category: 'actinoid', color: '#B30DA6', description: 'Synthetic element named after Dmitri Mendeleev', structure: 'One-hundred and one protons, one-hundred and fifty-seven neutrons, one-hundred and one electrons', interactions: {} },
+      { symbol: 'No', name: 'Nobelium', number: 102, group: 3, period: 7, category: 'actinoid', color: '#BD0D87', description: 'Synthetic element named after Alfred Nobel', structure: 'One-hundred and two protons, one-hundred and fifty-seven neutrons, one-hundred and two electrons', interactions: {} },
+      { symbol: 'Lr', name: 'Lawrencium', number: 103, group: 3, period: 7, category: 'actinoid', color: '#C70066', description: 'Synthetic element, last of the actinide series', structure: 'One-hundred and three protons, one-hundred and fifty-nine neutrons, one-hundred and three electrons', interactions: {} }
+    ];
+
+    // Create a map of elements by atomic number for easier access
+    const elementMap = {};
+    elements.forEach(element => {
+      elementMap[element.number] = element;
+    });
+
+    // Define element interactions - expanded set
+    // Find elements by atomic number and set their interactions
+    if (elementMap[1]) { // Hydrogen
+      elementMap[1].interactions = {
+        8: "H + O → Forms water (H₂O), essential for life",
+        7: "H + N → Forms ammonia (NH₃), used in fertilizers",
+        9: "H + F → Forms hydrogen fluoride (HF), highly corrosive acid",
+        17: "H + Cl → Forms hydrogen chloride (HCl), strong acid",
+        16: "H + S → Forms hydrogen sulfide (H₂S), toxic gas with rotten egg smell",
+        6: "H + C → Forms hydrocarbons, basis of fossil fuels and organic compounds",
+        35: "H + Br → Forms hydrogen bromide (HBr), strong acid used in synthesis",
+        53: "H + I → Forms hydrogen iodide (HI), strongest hydrohalic acid"
+      };
+    }
+
+    if (elementMap[6]) { // Carbon
+      elementMap[6].interactions = {
+        8: "C + O → Forms carbon dioxide (CO₂), greenhouse gas, and carbon monoxide (CO)",
+        7: "C + N → Forms cyanide compounds (CN⁻) and organic nitrogen compounds",
+        1: "C + H → Forms hydrocarbons, basis of fossil fuels and organic molecules",
+        6: "C + C → Forms various carbon structures: graphite, diamond, fullerenes, nanotubes",
+        26: "C + Fe → Forms steel when carbon is added to iron",
+        16: "C + S → Forms carbon disulfide (CS₂), used as solvent",
+        14: "C + Si → Forms silicon carbide (SiC), extremely hard material used as abrasive",
+        22: "C + Ti → Forms titanium carbide (TiC), used in cutting tools"
+      };
+    }
+
+    if (elementMap[8]) { // Oxygen
+      elementMap[8].interactions = {
+        1: "O + H → Forms water (H₂O) and hydroxides (OH⁻)",
+        6: "O + C → Forms carbon dioxide (CO₂) and carbon monoxide (CO)",
+        26: "O + Fe → Forms iron oxide (Fe₂O₃), commonly known as rust",
+        13: "O + Al → Forms aluminum oxide (Al₂O₃), extremely hard material",
+        16: "O + S → Forms sulfur dioxide (SO₂), air pollutant",
+        7: "O + N → Forms nitrogen oxides (NOₓ), components of smog",
+        30: "O + Zn → Forms zinc oxide (ZnO), used in sunscreens and rubber",
+        47: "O + Ag → Forms silver oxide (Ag₂O), used in batteries",
+        29: "O + Cu → Forms copper oxide (CuO), used as pigment"
+      };
+    }
+    
+    if (elementMap[7]) { // Nitrogen
+      elementMap[7].interactions = {
+        1: "N + H → Forms ammonia (NH₃), used in fertilizers",
+        8: "N + O → Forms nitrogen oxides (NOₓ), air pollutants in smog",
+        6: "N + C → Forms cyanides (CN⁻) and organic nitrogen compounds",
+        20: "N + Ca → Forms calcium nitride (Ca₃N₂), used in metal production",
+        13: "N + Al → Forms aluminum nitride (AlN), used in electronics",
+        5: "N + B → Forms boron nitride (BN), hard material similar to diamond"
+      };
+    }
+    
+    if (elementMap[9]) { // Fluorine
+      elementMap[9].interactions = {
+        1: "F + H → Forms hydrogen fluoride (HF), highly corrosive acid",
+        11: "F + Na → Forms sodium fluoride (NaF), used in toothpaste",
+        13: "F + Al → Forms aluminum fluoride (AlF₃), used in aluminum production",
+        6: "F + C → Forms fluorocarbons, used in non-stick coatings (Teflon)",
+        20: "F + Ca → Forms calcium fluoride (CaF₂), mineral fluorite"
+      };
+    }
+    
+    if (elementMap[15]) { // Phosphorus
+      elementMap[15].interactions = {
+        8: "P + O → Forms phosphorus oxides, used in fertilizers",
+        1: "P + H → Forms phosphine (PH₃), used in semiconductor manufacturing",
+        20: "P + Ca → Forms calcium phosphate (Ca₃(PO₄)₂), component of bones and teeth",
+        6: "P + C → Forms organophosphorus compounds, used in pesticides",
+        26: "P + Fe → Forms iron phosphide (Fe₃P), used in steel production"
+      };
+    }
+    
+    if (elementMap[16]) { // Sulfur
+      elementMap[16].interactions = {
+        1: "S + H → Forms hydrogen sulfide (H₂S), toxic gas with rotten egg smell",
+        8: "S + O → Forms sulfur dioxide (SO₂) and sulfur trioxide (SO₃)",
+        26: "S + Fe → Forms iron sulfide (FeS₂), mineral pyrite or 'fool's gold'",
+        29: "S + Cu → Forms copper sulfide (CuS), used in electronics",
+        30: "S + Zn → Forms zinc sulfide (ZnS), used in luminescent materials",
+        6: "S + C → Forms carbon disulfide (CS₂), industrial solvent"
+      };
+    }
+    
+    if (elementMap[26]) { // Iron
+      elementMap[26].interactions = {
+        8: "Fe + O → Forms iron oxide (Fe₂O₃), commonly known as rust",
+        6: "Fe + C → Forms steel when carbon is added to iron",
+        16: "Fe + S → Forms iron sulfide (FeS), pyrite or 'fool's gold'",
+        17: "Fe + Cl → Forms iron chloride (FeCl₃), used as coagulant in water treatment",
+        7: "Fe + N → Forms iron nitride (Fe₄N), used to harden steel surfaces",
+        15: "Fe + P → Forms iron phosphide (Fe₃P), increases steel hardness"
+      };
+    }
+    
+    if (elementMap[29]) { // Copper
+      elementMap[29].interactions = {
+        8: "Cu + O → Forms copper oxide (CuO), used in ceramics and as fungicide",
+        16: "Cu + S → Forms copper sulfide (CuS), a semiconductor material",
+        30: "Cu + Zn → Forms brass alloy, used in musical instruments and decorative items",
+        50: "Cu + Sn → Forms bronze alloy, historically important material",
+        47: "Cu + Ag → Forms copper-silver alloy, used in jewelry and electrical contacts",
+        79: "Cu + Au → Forms copper-gold alloy, used in jewelry and dentistry"
+      };
+    }
+    
+    if (elementMap[47]) { // Silver
+      elementMap[47].interactions = {
+        16: "Ag + S → Forms silver sulfide (Ag₂S), causes tarnishing of silver",
+        17: "Ag + Cl → Forms silver chloride (AgCl), used in photography",
+        35: "Ag + Br → Forms silver bromide (AgBr), light-sensitive material in photography",
+        8: "Ag + O → Forms silver oxide (Ag₂O), used in batteries",
+        79: "Ag + Au → Forms electrum, a natural alloy used in ancient coinage",
+        29: "Ag + Cu → Forms sterling silver, standard for silverware and jewelry"
+      };
+    }
+    
+    if (elementMap[79]) { // Gold
+      elementMap[79].interactions = {
+        17: "Au + Cl → Forms gold chloride (AuCl₃), used in gold plating",
+        35: "Au + Br → Forms gold bromide (AuBr₃), used in some chemical processes",
+        29: "Au + Cu → Forms rose gold alloy, used in jewelry",
+        47: "Au + Ag → Forms white gold alloy, used in jewelry",
+        46: "Au + Pd → Forms palladium gold, used in electronics",
+        78: "Au + Pt → Forms platinum gold, used in specialized applications"
+      };
+    }
+    
+    if (elementMap[11]) { // Sodium
+      elementMap[11].interactions = {
+        17: "Na + Cl → Forms sodium chloride (NaCl), table salt",
+        8: "Na + O → Forms sodium oxide (Na₂O), highly reactive with water",
+        19: "Na + K → Forms sodium-potassium alloy (NaK), used as coolant",
+        1: "Na + H → Forms sodium hydride (NaH), strong reducing agent",
+        9: "Na + F → Forms sodium fluoride (NaF), used in toothpaste",
+        16: "Na + S → Forms sodium sulfide (Na₂S), used in paper production"
+      };
+    }
+    
+    if (elementMap[92]) { // Uranium
+      elementMap[92].interactions = {
+        8: "U + O → Forms uranium oxide (UO₂), used in nuclear fuel",
+        9: "U + F → Forms uranium hexafluoride (UF₆), used in uranium enrichment",
+        6: "U + C → Forms uranium carbide (UC), alternative nuclear fuel",
+        7: "U + N → Forms uranium nitride (UN), high-density nuclear fuel",
+        94: "U → Pu → Nuclear reactions convert uranium-238 to plutonium"
+      };
+    }
+    
+    if (elementMap[78]) { // Platinum
+      elementMap[78].interactions = {
+        17: "Pt + Cl → Forms chloroplatinic acid (H₂PtCl₆), used in catalysts",
+        8: "Pt + O → Platinum can catalyze oxidation reactions",
+        1: "Pt + H → Platinum catalyzes hydrogen reactions in fuel cells",
+        6: "Pt + C → Forms organoplatinum compounds used in cancer treatment",
+        46: "Pt + Pd → Forms platinum-palladium alloy used in catalytic converters"
+      };
+    }
+    
+    if (elementMap[82]) { // Lead
+      elementMap[82].interactions = {
+        8: "Pb + O → Forms lead oxide (PbO), used in batteries",
+        16: "Pb + S → Forms lead sulfide (PbS), the mineral galena",
+        17: "Pb + Cl → Forms lead chloride (PbCl₂), used in production of other lead compounds",
+        35: "Pb + Br → Forms lead bromide (PbBr₂), used in photographic emulsions",
+        50: "Pb + Sn → Forms solder, used in electronics and plumbing"
+      };
+    }
+    
+    if (elementMap[35]) { // Bromine
+      elementMap[35].interactions = {
+        1: "Br + H → Forms hydrogen bromide (HBr), strong acid",
+        19: "Br + K → Forms potassium bromide (KBr), used in photography",
+        47: "Br + Ag → Forms silver bromide (AgBr), light-sensitive material in photography",
+        11: "Br + Na → Forms sodium bromide (NaBr), sedative and anticonvulsant",
+        6: "Br + C → Forms brominated flame retardants and pesticides"
+      };
+    }
+    
+    if (elementMap[74]) { // Tungsten
+      elementMap[74].interactions = {
+        6: "W + C → Forms tungsten carbide (WC), extremely hard material",
+        8: "W + O → Forms tungsten oxide (WO₃), used in electrochromic windows",
+        7: "W + N → Forms tungsten nitride (WN), hard wear-resistant coating",
+        26: "W + Fe → Forms tungsten steel, used in high-speed cutting tools",
+        27: "W + Co → Forms tungsten-cobalt alloy, used in cutting tools"
+      };
+    }
+    
+    if (elementMap[13]) { // Aluminum
+      elementMap[13].interactions = {
+        8: "Al + O → Forms aluminum oxide (Al₂O₃), extremely hard material",
+        9: "Al + F → Forms aluminum fluoride (AlF₃), used in aluminum production",
+        17: "Al + Cl → Forms aluminum chloride (AlCl₃), used as catalyst",
+        29: "Al + Cu → Forms aluminum bronze, corrosion-resistant alloy",
+        30: "Al + Zn → Forms zinc aluminum alloy, used in die casting"
+      };
+    }
+    
+    if (elementMap[14]) { // Silicon
+      elementMap[14].interactions = {
+        8: "Si + O → Forms silicon dioxide (SiO₂), major component of glass",
+        6: "Si + C → Forms silicon carbide (SiC), extremely hard abrasive",
+        1: "Si + H → Forms silanes (SiH₄), used in semiconductor manufacturing",
+        7: "Si + N → Forms silicon nitride (Si₃N₄), used in high-temperature applications",
+        13: "Si + Al → Forms aluminosilicates, basis of many minerals and ceramics"
+      };
+    }
+    
+    if (elementMap[19]) { // Potassium
+      elementMap[19].interactions = {
+        8: "K + O → Forms potassium oxide (K₂O), highly reactive with water",
+        17: "K + Cl → Forms potassium chloride (KCl), used as fertilizer",
+        11: "K + Na → Forms sodium-potassium alloy (NaK), liquid at room temperature",
+        35: "K + Br → Forms potassium bromide (KBr), historically used as sedative",
+        53: "K + I → Forms potassium iodide (KI), used in radiation protection"
+      };
+    }
+    
+    if (elementMap[20]) { // Calcium
+      elementMap[20].interactions = {
+        8: "Ca + O → Forms calcium oxide (CaO), quicklime",
+        17: "Ca + Cl → Forms calcium chloride (CaCl₂), road salt and desiccant",
+        9: "Ca + F → Forms calcium fluoride (CaF₂), mineral fluorite",
+        15: "Ca + P → Forms calcium phosphate (Ca₃(PO₄)₂), component of bones and teeth",
+        6: "Ca + C → Forms calcium carbide (CaC₂), produces acetylene"
+      };
+    }
+    
+    if (elementMap[30]) { // Zinc
+      elementMap[30].interactions = {
+        8: "Zn + O → Forms zinc oxide (ZnO), used in sunscreens and rubber",
+        16: "Zn + S → Forms zinc sulfide (ZnS), used in luminescent materials",
+        17: "Zn + Cl → Forms zinc chloride (ZnCl₂), used as flux in soldering",
+        29: "Zn + Cu → Forms brass alloy, used in musical instruments",
+        13: "Zn + Al → Forms zinc aluminum alloy, used in die casting"
+      };
+    }
+    
+    if (elementMap[33]) { // Arsenic
+      elementMap[33].interactions = {
+        8: "As + O → Forms arsenic oxide (As₂O₃), highly toxic compound",
+        1: "As + H → Forms arsine (AsH₃), extremely toxic gas",
+        31: "As + Ga → Forms gallium arsenide (GaAs), semiconductor",
+        49: "As + In → Forms indium arsenide (InAs), used in infrared detectors",
+        13: "As + Al → Forms aluminum arsenide (AlAs), semiconductor material"
+      };
+    }
+    
+    if (elementMap[22]) { // Titanium
+      elementMap[22].interactions = {
+        8: "Ti + O → Forms titanium dioxide (TiO₂), white pigment",
+        6: "Ti + C → Forms titanium carbide (TiC), used in cutting tools",
+        7: "Ti + N → Forms titanium nitride (TiN), hard gold-colored coating",
+        13: "Ti + Al → Forms titanium aluminide, lightweight high-temperature alloy",
+        26: "Ti + Fe → Forms ferrotitanium, used in steel production"
+      };
+    }
+    
+    if (elementMap[28]) { // Nickel
+      elementMap[28].interactions = {
+        8: "Ni + O → Forms nickel oxide (NiO), used in ceramic materials",
+        6: "Ni + C → Forms nickel carbonyl (Ni(CO)₄), used in nickel refining",
+        16: "Ni + S → Forms nickel sulfide (NiS), occurs in meteoric iron",
+        27: "Ni + Co → Forms nickel-cobalt alloy, used in jet engines",
+        24: "Ni + Cr → Forms nichrome, used in heating elements"
+      };
+    }
+
+    // Function to map element colors by category
+    const getCategoryColor = (category) => {
+      const colors = {
+        alkali: 0xAB5CF2,         // Purple
+        alkaline: 0x8AFF00,       // Light green
+        transition: 0xFFAA00,      // Orange
+        'post-transition': 0xB3B3B3, // Light gray
+        metalloid: 0xFFB5B5,       // Pink
+        nonmetal: 0x909090,        // Gray
+        noble: 0xB3E3F5,           // Light blue
+        halogen: 0x90E050,         // Green
+        lanthanoid: 0x70D4FF,      // Cyan
+        actinoid: 0xFF70D4         // Pink-purple
+      };
+      return colors[category] || 0xFFFFFF;
+    };
+
+    // Bond type determination function
+    const determineBondType = (element1, element2) => {
+      // First check if BondCalculator from imported code is available
+      if (typeof BondCalculator !== 'undefined' && typeof BondTypes !== 'undefined') {
+        console.log("Using imported BondCalculator for bond determination");
+        
+        // Calculate electronegativity difference
+        const electronegativityValues = {
+          // Electronegativity values (Pauling scale)
+          1: 2.20, // H
+          2: 0.00, // He (noble gas, doesn't form bonds readily)
+          3: 0.98, // Li
+          4: 1.57, // Be
+          5: 2.04, // B
+          6: 2.55, // C
+          7: 3.04, // N
+          8: 3.44, // O
+          9: 3.98, // F
+          10: 0.00, // Ne (noble gas)
+          11: 0.93, // Na
+          12: 1.31, // Mg
+          13: 1.61, // Al
+          14: 1.90, // Si
+          15: 2.19, // P
+          16: 2.58, // S
+          17: 3.16, // Cl
+          18: 0.00, // Ar (noble gas)
+          19: 0.82, // K
+          20: 1.00, // Ca
+          21: 1.36, // Sc
+          22: 1.54, // Ti
+          23: 1.63, // V
+          24: 1.66, // Cr
+          25: 1.55, // Mn
+          26: 1.83, // Fe
+          27: 1.88, // Co
+          28: 1.91, // Ni
+          29: 1.90, // Cu
+          30: 1.65, // Zn
+          31: 1.81, // Ga
+          32: 2.01, // Ge
+          33: 2.18, // As
+          34: 2.55, // Se
+          35: 2.96, // Br
+          36: 0.00, // Kr (noble gas)
+          37: 0.82, // Rb
+          38: 0.95, // Sr
+          39: 1.22, // Y
+          40: 1.33, // Zr
+          41: 1.60, // Nb
+          42: 2.16, // Mo
+          44: 2.20, // Ru
+          45: 2.28, // Rh
+          46: 2.20, // Pd
+          47: 1.93, // Ag
+          48: 1.69, // Cd
+          49: 1.78, // In
+          50: 1.96, // Sn
+          51: 2.05, // Sb
+          52: 2.10, // Te
+          53: 2.66, // I
+          54: 0.00, // Xe (noble gas)
+          55: 0.79, // Cs
+          56: 0.89, // Ba
+          57: 1.10, // La
+          74: 2.36, // W 
+          76: 2.20, // Os
+          77: 2.20, // Ir
+          78: 2.28, // Pt
+          79: 2.54, // Au
+          80: 2.00, // Hg
+          81: 1.62, // Tl
+          82: 2.33, // Pb
+          83: 2.02, // Bi
+          88: 0.90, // Ra
+          89: 1.10, // Ac
+          90: 1.30, // Th
+          91: 1.50, // Pa
+          92: 1.38  // U
+        };
+        
+        const diffEN = Math.abs(
+          (electronegativityValues[element1] || 0) - 
+          (electronegativityValues[element2] || 0)
+        );
+        
+        // Use the imported calculator
+        return BondCalculator.determineBondType(element1, element2, diffEN);
+      }
+      
+      // If imported calculator isn't available, use our built-in logic as fallback
+      console.log("Using built-in bond determination logic");
+      
+      // Calculate electronegativity difference
+      const electronegativityValues = {
+        // Electronegativity values (Pauling scale)
+        1: 2.20, // H
+        2: 0.00, // He (noble gas, doesn't form bonds readily)
+        3: 0.98, // Li
+        4: 1.57, // Be
+        5: 2.04, // B
+        6: 2.55, // C
+        7: 3.04, // N
+        8: 3.44, // O
+        9: 3.98, // F
+        10: 0.00, // Ne (noble gas)
+        11: 0.93, // Na
+        12: 1.31, // Mg
+        13: 1.61, // Al
+        14: 1.90, // Si
+        15: 2.19, // P
+        16: 2.58, // S
+        17: 3.16, // Cl
+        18: 0.00, // Ar (noble gas)
+        19: 0.82, // K
+        20: 1.00, // Ca
+        21: 1.36, // Sc
+        22: 1.54, // Ti
+        23: 1.63, // V
+        24: 1.66, // Cr
+        25: 1.55, // Mn
+        26: 1.83, // Fe
+        27: 1.88, // Co
+        28: 1.91, // Ni
+        29: 1.90, // Cu
+        30: 1.65, // Zn
+        31: 1.81, // Ga
+        32: 2.01, // Ge
+        33: 2.18, // As
+        34: 2.55, // Se
+        35: 2.96, // Br
+        36: 0.00, // Kr (noble gas)
+        37: 0.82, // Rb
+        38: 0.95, // Sr
+        39: 1.22, // Y
+        40: 1.33, // Zr
+        41: 1.60, // Nb
+        42: 2.16, // Mo
+        44: 2.20, // Ru
+        45: 2.28, // Rh
+        46: 2.20, // Pd
+        47: 1.93, // Ag
+        48: 1.69, // Cd
+        49: 1.78, // In
+        50: 1.96, // Sn
+        51: 2.05, // Sb
+        52: 2.10, // Te
+        53: 2.66, // I
+        54: 0.00, // Xe (noble gas)
+        55: 0.79, // Cs
+        56: 0.89, // Ba
+        57: 1.10, // La
+        74: 2.36, // W 
+        76: 2.20, // Os
+        77: 2.20, // Ir
+        78: 2.28, // Pt
+        79: 2.54, // Au
+        80: 2.00, // Hg
+        81: 1.62, // Tl
+        82: 2.33, // Pb
+        83: 2.02, // Bi
+        88: 0.90, // Ra
+        89: 1.10, // Ac
+        90: 1.30, // Th
+        91: 1.50, // Pa
+        92: 1.38  // U
+      };
+      
+      // If we don't have electronegativity data for either element, default to "Unknown bond type"
+      if (!electronegativityValues[element1] || !electronegativityValues[element2]) {
+        return {
+          type: "Unknown",
+          description: "Insufficient data to determine bond type",
+          color: "#AAAAAA", // Gray
+          strength: "Unknown"
+        };
+      }
+      
+      // Calculate the electronegativity difference
+      const diffEN = Math.abs(electronegativityValues[element1] - electronegativityValues[element2]);
+      
+      // Check if either element is a noble gas (they don't form strong bonds)
+      if (electronegativityValues[element1] === 0 || electronegativityValues[element2] === 0) {
+        return {
+          type: "Van der Waals forces",
+          description: "Weak attractions between molecules or atoms",
+          color: "#CCCCCC", // Light gray
+          strength: "Very weak (0.1-40 kJ/mol)",
+          additional: "Important in noble gases and nonpolar molecules"
+        };
+      }
+      
+      // Check for hydrogen bonding (special case)
+      const isHydrogenBonding = 
+        (element1 === 1 && [7, 8, 9, 17].includes(element2)) || 
+        (element2 === 1 && [7, 8, 9, 17].includes(element1));
+      
+      if (isHydrogenBonding) {
+        return {
+          type: "Hydrogen bond",
+          description: "Electrostatic attraction between hydrogen and electronegative atoms (N, O, F, Cl)",
+          color: "#00FFFF", // Cyan
+          strength: "Moderate (5-30 kJ/mol)",
+          additional: "Hydrogen bonds are crucial in water, DNA, and protein structures"
+        };
+      }
+      
+      // Check for metallic bonding (both elements are metals)
+      const metals = [3, 4, 11, 12, 13, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 
+                     37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 49, 50, 55, 56, 57, 
+                     74, 76, 77, 78, 79, 80, 81, 82, 83, 88, 89, 90, 91, 92];
+      
+      const isMetallic = metals.includes(element1) && metals.includes(element2);
+      
+      if (isMetallic) {
+        return {
+          type: "Metallic bond",
+          description: "Sharing of delocalized electrons among a lattice of metal atoms",
+          color: "#FFD700", // Gold
+          strength: "Strong (100-1000 kJ/mol)",
+          additional: "Responsible for electrical conductivity, malleability, and ductility of metals"
+        };
+      }
+      
+      // Determine bond type based on electronegativity difference
+      if (diffEN < 0.4) {
+        return {
+          type: "Pure covalent bond",
+          description: "Equal sharing of electron pairs between atoms",
+          color: "#00FF00", // Green
+          strength: "Strong (150-1000 kJ/mol)",
+          additional: "Examples: H₂, O₂, N₂, F₂, Cl₂"
+        };
+      } else if (diffEN >= 0.4 && diffEN < 1.7) {
+        return {
+          type: "Polar covalent bond",
+          description: "Unequal sharing of electron pairs, creating partial charges",
+          color: "#FFA500", // Orange
+          strength: "Strong (150-800 kJ/mol)",
+          additional: "Examples: H₂O, NH₃, HCl, alcohols"
+        };
+      } else {
+        return {
+          type: "Ionic bond",
+          description: "Complete transfer of electrons creating charged ions",
+          color: "#FF0000", // Red
+          strength: "Strong (400-4000 kJ/mol)",
+          additional: "Examples: NaCl, MgO, CaF₂, most salts"
+        };
+      }
+    };
+
+    // Calculate interactions between elements with bond information
+    const getInteractionText = (selectedElements) => {
+      if (selectedElements.length < 2) return "";
+      
+      // Try to use the imported getInteractionText function if available
+      if (typeof window.getInteractionText === 'function' && typeof BondCalculator !== 'undefined') {
+        console.log("Using imported getInteractionText function");
+        try {
+          // Add electronegativity data to elementMap for compatibility
+          const tempElementMap = {};
+          elements.forEach(element => {
+            // Make a copy
+            const elementWithEN = { ...element };
+            
+            // Add electronegativity data
+            const electronegativityValues = {
+              1: 2.20, 2: 0.00, 3: 0.98, 4: 1.57, 5: 2.04, 6: 2.55, 7: 3.04, 8: 3.44, 9: 3.98, 10: 0.00,
+              11: 0.93, 12: 1.31, 13: 1.61, 14: 1.90, 15: 2.19, 16: 2.58, 17: 3.16, 18: 0.00, 19: 0.82, 20: 1.00,
+              // ... other values as needed
+            };
+            elementWithEN.electronegativity = electronegativityValues[element.number] || 0;
+            
+            tempElementMap[element.number] = elementWithEN;
+          });
+          
+          return window.getInteractionText(selectedElements, tempElementMap);
+        } catch (error) {
+          console.error("Error using imported getInteractionText:", error);
+          // Fall back to built-in method
+        }
+      }
+      
+      // Fall back to our built-in method
+      console.log("Using built-in getInteractionText method");
+      let interactionText = "";
+      
+      for (let i = 0; i < selectedElements.length; i++) {
+        for (let j = i + 1; j < selectedElements.length; j++) {
+          const element1 = elementMap[selectedElements[i]];
+          const element2 = elementMap[selectedElements[j]];
+          
+          if (element1 && element2) {
+            // Get bond information
+            const bondInfo = determineBondType(element1.number, element2.number);
+            const bondText = `<span style="color:${bondInfo.color};font-weight:bold">${bondInfo.type}</span>`;
+            
+            // Check if interaction exists
+            let interactionDetails = "";
+            if (element1.interactions[element2.number]) {
+              interactionDetails = element1.interactions[element2.number];
+            } else if (element2.interactions[element1.number]) {
+              interactionDetails = element2.interactions[element1.number];
+            } else {
+              interactionDetails = `No specific interaction data for ${element1.symbol} and ${element2.symbol}.`;
+            }
+            
+            interactionText += `<div style="margin-bottom:12px">
+              <div>${element1.symbol} + ${element2.symbol} → ${interactionDetails}</div>
+              <div><b>Bond type:</b> ${bondText}</div>
+              <div><b>Description:</b> ${bondInfo.description}</div>
+              <div><b>Strength:</b> ${bondInfo.strength}</div>
+              ${bondInfo.additional ? `<div><b>Note:</b> ${bondInfo.additional}</div>` : ''}
+              <div style="height:1px;background-color:#666;margin-top:8px"></div>
+            </div>`;
+          }
+        }
+      }
+      
+      return interactionText;
+    };
+
+    const PeriodicTable = () => {
+      const mountRef = useRef(null);
+      const sceneRef = useRef(null);
+      const rendererRef = useRef(null);
+      const tableGroupRef = useRef(null);
+      const cameraRef = useRef(null);
+      const elementCubesRef = useRef({});
+      const atomModelRef = useRef(null);
+      
+      const [selectedElements, setSelectedElements] = useState([]);
+      const [interactions, setInteractions] = useState("");
+      const [currentElement, setCurrentElement] = useState(null);
+      const [showElementInfo, setShowElementInfo] = useState(false);
+      const [showInteractions, setShowInteractions] = useState(false);
+      const [showAtomModel, setShowAtomModel] = useState(false);
+      const [viewingTable, setViewingTable] = useState(true);
+
+      // Update interactions when selected elements change
+      useEffect(() => {
+        if (selectedElements.length >= 2) {
+          setInteractions(getInteractionText(selectedElements));
+          setShowInteractions(true);
+        } else {
+          setInteractions("");
+          setShowInteractions(false);
+        }
+      }, [selectedElements]);
+
+      // Create atom model for the selected element
+      const createAtomModel = (element) => {
+        if (!sceneRef.current) return null;
+        
+        console.log("Creating atom model for:", element.name);
+        
+        // Remove old atom model if it exists
+        if (atomModelRef.current) {
+          console.log("Removing old atom model");
+          sceneRef.current.remove(atomModelRef.current);
+          atomModelRef.current = null;
+        }
+        
+        // Create new group for the atom model
+        const atomGroup = new THREE.Group();
+        console.log("Created new atom group");
+        
+        // Make the model MUCH larger for visibility
+        const scale = 1.0;
+        
+        // NUCLEUS
+        const protons = element.number; // Atomic number = proton count
+        const electrons = protons; // For neutral atoms
+        
+        // Try to parse neutrons from structure text, or estimate if not found
+        const structureText = element.structure;
+        let neutrons = protons; // Default estimate
+        const neutronMatch = structureText.match(/(\d+)(?=\s+neutrons)/);
+        if (neutronMatch) neutrons = parseInt(neutronMatch[1]);
+        
+        console.log(`Element ${element.name}: ${protons} protons, ${neutrons} neutrons, ${electrons} electrons`);
+        
+        // Create a VERY large, bright nucleus for better visibility
+        const nucleusGeometry = new THREE.SphereGeometry(5 * scale, 32, 32);
+        const nucleusMaterial = new THREE.MeshPhongMaterial({ 
+          color: 0xFF5555,
+          emissive: 0xFF2222,
+          specular: 0xFFFFFF,
+          shininess: 100
+        });
+        
+        const nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial);
+        atomGroup.add(nucleus);
+        
+        // ELECTRON SHELLS - simplified for visibility
+        // Create fixed number of shells for simplicity
+        const shellCount = Math.min(7, Math.max(1, element.period));
+        console.log(`Creating ${shellCount} electron shells`);
+        
+        for (let i = 0; i < shellCount; i++) {
+          // Make shells progressively larger
+          const shellRadius = (10 + (i * 5)) * scale;
+          
+          // Create shell (ring)
+          const shellGeometry = new THREE.TorusGeometry(shellRadius, 0.5 * scale, 16, 64);
+          const shellMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x44AAFF,
+            transparent: true,
+            opacity: 0.8
+          });
+          
+          const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+          
+          // Fixed orientation for visibility
+          shell.rotation.x = Math.PI / 2;
+          
+          atomGroup.add(shell);
+          
+          // Add some electrons to each shell - more scientifically accurate distribution
+          let electronCount = 0;
+          
+          // Use actual electron configuration rules (simplified)
+          // Shell 1 (K): 2 electrons max
+          // Shell 2 (L): 8 electrons max
+          // Shell 3 (M): 18 electrons max
+          // Shell 4 (N): 32 electrons max
+          // Shell 5 (O): 32 electrons max
+          // Shell 6 (P): 18 electrons max
+          // Shell 7 (Q): 8 electrons max
+          const shellCapacities = [2, 8, 18, 32, 32, 18, 8];
+          
+          // Calculate electrons in this shell
+          let remainingElectrons = electrons;
+          for (let j = 0; j < i; j++) {
+            remainingElectrons -= Math.min(remainingElectrons, shellCapacities[j]);
+          }
+          electronCount = Math.min(remainingElectrons, shellCapacities[i]);
+          
+          // Check if we have any electrons to place
+          if (electronCount <= 0) continue;
+          
+          for (let j = 0; j < electronCount; j++) {
+            const electronGeometry = new THREE.SphereGeometry(1.0 * scale, 16, 16);
+            const electronMaterial = new THREE.MeshPhongMaterial({ 
+              color: 0x00FFFF,
+              emissive: 0x00FFFF,
+              shininess: 80
+            });
+            
+            const electron = new THREE.Mesh(electronGeometry, electronMaterial);
+            
+            // Position electrons evenly around the shell
+            const angle = (j / electronCount) * Math.PI * 2;
+            electron.position.set(
+              shellRadius * Math.cos(angle),
+              shellRadius * Math.sin(angle),
+              0
+            );
+            
+            atomGroup.add(electron);
+          }
+        }
+        
+        // Add valence electron visualization
+        if (element.category !== 'noble') {
+          const valenceElectrons = getValenceElectrons(element.number);
+          if (valenceElectrons > 0) {
+            const valenceShellIndex = shellCount - 1;
+            const valenceShellRadius = (10 + (valenceShellIndex * 5)) * scale;
+            
+            // Create a special highlight for valence electrons
+            for (let i = 0; i < valenceElectrons; i++) {
+              const valenceGeometry = new THREE.SphereGeometry(1.2 * scale, 16, 16);
+              const valenceMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x33FF33, // Bright green for valence electrons
+                emissive: 0x33FF33,
+                shininess: 100
+              });
+              
+              const valenceElectron = new THREE.Mesh(valenceGeometry, valenceMaterial);
+              
+              // Position valence electrons evenly around the outermost shell
+              const angle = (i / valenceElectrons) * Math.PI * 2;
+              valenceElectron.position.set(
+                valenceShellRadius * Math.cos(angle),
+                valenceShellRadius * Math.sin(angle),
+                0
+              );
+              
+              atomGroup.add(valenceElectron);
+            }
+          }
+        }
+        
+        // Add to scene and set as current atom model
+        sceneRef.current.add(atomGroup);
+        atomModelRef.current = atomGroup;
+        
+        // Make sure it's positioned at the origin (0,0,0)
+        atomGroup.position.set(0, 0, 0);
+        
+        // Make sure it's visible
+        atomGroup.visible = true;
+        
+        console.log("Added atom model to scene at position:", atomGroup.position);
+        
+        return atomGroup;
+      };
+      
+      // Function to determine valence electrons
+      const getValenceElectrons = (atomicNumber) => {
+        // Simplified rules for valence electrons
+        
+        // First check for special cases
+        // Noble gases (He, Ne, Ar, Kr, Xe, Rn)
+        if ([2, 10, 18, 36, 54, 86].includes(atomicNumber)) {
+          return 8; // (except He which has 2, but we'll simplify)
+        }
+        
+        // For representative elements (s and p blocks)
+        if (atomicNumber <= 2) { // H and He
+          return atomicNumber;
+        } else if (atomicNumber <= 10) { // Li to Ne
+          return atomicNumber - 2;
+        } else if (atomicNumber <= 18) { // Na to Ar
+          return atomicNumber - 10;
+        } else if (atomicNumber <= 36) { // K to Kr
+          return atomicNumber - 28;
+        } else if (atomicNumber <= 54) { // Rb to Xe
+          return atomicNumber - 46;
+        } else if (atomicNumber <= 86) { // Cs to Rn
+          return atomicNumber - 78;
+        }
+        
+        // Simplified for transition metals, lanthanides, and actinides
+        return 2; // Most transition metals behave as if they have 2 valence electrons
+      };
+
+      // Switch between periodic table and atom/bond model views
+      const switchView = (element, secondElement = null) => {
+        console.log("Switching view, viewingTable:", viewingTable);
+        
+        if (viewingTable && element) {
+          console.log("Switching to model view for:", element.name);
+          
+          // COMPLETELY REMOVE the table from the scene temporarily
+          if (tableGroupRef.current && sceneRef.current) {
+            sceneRef.current.remove(tableGroupRef.current);
+            console.log("Table completely removed from scene");
+          }
+          
+          // Create appropriate model based on number of elements selected
+          if (secondElement) {
+            // Create bond model between two elements
+            createBondModel(element, secondElement);
+          } else {
+            // Create single atom model
+            createAtomModel(element);
+          }
+          
+          // Move camera to directly face the model
+          if (cameraRef.current) {
+            // Reset camera position to look at the model head-on
+            cameraRef.current.position.set(0, 0, 40);
+            cameraRef.current.lookAt(0, 0, 0);
+            console.log("Camera repositioned to:", cameraRef.current.position);
+          }
+          
+          // Update state
+          setViewingTable(false);
+          setShowAtomModel(true);
+          console.log("State updated: viewing atom/bond model");
+          
+        } else {
+          console.log("Switching back to table view");
+          
+          // Remove atom/bond model completely
+          if (atomModelRef.current && sceneRef.current) {
+            sceneRef.current.remove(atomModelRef.current);
+            atomModelRef.current = null;
+            console.log("Model removed from scene");
+          }
+          
+          // Add table back to the scene
+          if (tableGroupRef.current && sceneRef.current) {
+            sceneRef.current.add(tableGroupRef.current);
+            console.log("Table added back to scene");
+          }
+          
+          // Update state
+          setViewingTable(true);
+          setShowAtomModel(false);
+          console.log("State updated: viewing table");
+        }
+      };
+
+      // Setup Three.js scene
+      useEffect(() => {
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
+        sceneRef.current = scene;
+
+        // Camera setup
+        const camera = new THREE.PerspectiveCamera(
+          60,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000
+        );
+        camera.position.set(0, 0, 30);
+        cameraRef.current = camera;
+
+        // Renderer setup
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        mountRef.current.appendChild(renderer.domElement);
+        rendererRef.current = renderer;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(0, 10, 10);
+        scene.add(directionalLight);
+
+        // Store all cubes to enable interaction
+        const elementCubes = {};
+        elementCubesRef.current = elementCubes;
+        
+        // Group adjustments to create proper periodic table layout
+        const tableGroup = new THREE.Group();
+        scene.add(tableGroup);
+        tableGroupRef.current = tableGroup;
+        
+        // Create element cubes
+        elements.forEach(element => {
+          // Adjust positions to match periodic table layout
+          let x = element.group * 1.5 - 10;
+          let y = -(element.period * 1.5) + 5;
+          
+          // Create cube geometry
+          const geometry = new THREE.BoxGeometry(1, 1, 1);
+          const material = new THREE.MeshPhongMaterial({
+            color: getCategoryColor(element.category),
+            specular: 0x444444,
+            shininess: 30
+          });
+          
+          const cube = new THREE.Mesh(geometry, material);
+          cube.position.set(x, y, 0);
+          
+          // Add to collection and scene
+          elementCubes[element.number] = { mesh: cube, data: element };
+          tableGroup.add(cube);
+        });
+
+        // Manual orbit controls variables
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let rotationSpeed = 0.005;
+        let autoRotate = false; // Auto-rotation disabled by default
+        let autoRotateSpeed = 0.005;
+
+        // Raycaster for interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Handle resize
+        function handleResize() {
+          if (cameraRef.current && rendererRef.current) {
+            cameraRef.current.aspect = window.innerWidth / window.innerHeight;
+            cameraRef.current.updateProjectionMatrix();
+            rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+          }
+        }
+        
+        // Mouse controls
+        function handleMouseDown(event) {
+          isDragging = true;
+          previousMousePosition = {
+            x: event.clientX,
+            y: event.clientY
+          };
+          autoRotate = false;
+        }
+        
+        function handleMouseMove(event) {
+          if (isDragging) {
+            const deltaMove = {
+              x: event.clientX - previousMousePosition.x,
+              y: event.clientY - previousMousePosition.y
+            };
+            
+            // Rotate the appropriate group based on current view
+            if (viewingTable && tableGroupRef.current) {
+              tableGroupRef.current.rotation.y += deltaMove.x * rotationSpeed;
+              tableGroupRef.current.rotation.x += deltaMove.y * rotationSpeed;
+            } else if (!viewingTable && atomModelRef.current) {
+              atomModelRef.current.rotation.y += deltaMove.x * rotationSpeed;
+              atomModelRef.current.rotation.x += deltaMove.y * rotationSpeed;
+            }
+            
+            previousMousePosition = {
+              x: event.clientX,
+              y: event.clientY
+            };
+          }
+        }
+        
+        function handleMouseUp() {
+          isDragging = false;
+        }
+        
+        function handleWheel(event) {
+          // Zoom in/out with the mouse wheel
+          event.preventDefault();
+          
+          if (cameraRef.current) {
+            // Adjust camera position based on wheel delta
+            const zoomSpeed = 0.1;
+            cameraRef.current.position.z += event.deltaY * 0.01 * zoomSpeed;
+            
+            // Limit how close and far the camera can go
+            cameraRef.current.position.z = Math.max(10, Math.min(50, cameraRef.current.position.z));
+          }
+        }
+
+        // Handle click
+        function handleClick(event) {
+          console.log("Click detected");
+          
+          // Calculate mouse position in normalized device coordinates
+          mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+          mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+          // If viewing atom model, check for clicks on the back button area
+          if (!viewingTable && event.clientY < 100 && event.clientX < 100) {
+            console.log("Back button area clicked");
+            switchView(null);
+            return;
+          }
+
+          // If viewing atom model, ignore other clicks
+          if (!viewingTable) {
+            console.log("Ignoring click on atom model view");
+            return;
+          }
+
+          if (!tableGroupRef.current || !cameraRef.current) {
+            console.log("Table group or camera not available");
+            return;
+          }
+
+          // Update the picking ray with the camera and mouse position
+          raycaster.setFromCamera(mouse, cameraRef.current);
+
+          // Calculate objects intersecting the picking ray
+          const intersects = raycaster.intersectObjects(tableGroupRef.current.children);
+          console.log(`Found ${intersects.length} intersected objects`);
+
+          if (intersects.length > 0) {
+            const selectedCube = intersects[0].object;
+            
+            // Find which element was clicked
+            for (const [number, data] of Object.entries(elementCubesRef.current)) {
+              if (data.mesh === selectedCube) {
+                const elementNumber = parseInt(number);
+                const elementData = data.data;
+                
+                console.log(`Selected element: ${elementData.name} (${elementData.symbol})`);
+                
+                // If shift key is held and we already have an element selected, show bond visualization
+                if (event.shiftKey && selectedElements.length === 1) {
+                  const firstElement = elementMap[selectedElements[0]];
+                  
+                  // Show the bond visualization
+                  setCurrentElement(elementData);
+                  setShowElementInfo(true);
+                  
+                  // Create and show the bond model
+                  switchView(firstElement, elementData);
+                  
+                  // Clear selection after showing bond
+                  setSelectedElements([]);
+                } else {
+                  // Toggle selection
+                  if (selectedElements.includes(elementNumber)) {
+                    // Deselect this element
+                    setSelectedElements(selectedElements.filter(num => num !== elementNumber));
+                    selectedCube.material.emissive.setHex(0x000000);
+                  } else {
+                    // Select this element
+                    setSelectedElements([...selectedElements, elementNumber]);
+                    selectedCube.material.emissive.setHex(0x555555);
+                  }
+                  
+                  // Show single atom visualization if clicked without shift
+                  if (!event.shiftKey) {
+                    setCurrentElement(elementData);
+                    setShowElementInfo(true);
+                    switchView(elementData);
+                  }
+                }
+                
+                break;
+              }
+            }
+          }
+        }
+
+        // Animation loop
+        function animate() {
+          if (!sceneRef.current || !rendererRef.current || !cameraRef.current) return;
+          
+          requestAnimationFrame(animate);
+          
+          // Auto-rotate if enabled
+          if (autoRotate) {
+            if (viewingTable && tableGroupRef.current) {
+              tableGroupRef.current.rotation.y += autoRotateSpeed;
+            } else if (!viewingTable && atomModelRef.current) {
+              atomModelRef.current.rotation.y += autoRotateSpeed * 0.5;
+            }
+          }
+          
+          rendererRef.current.render(sceneRef.current, cameraRef.current);
+        }
+
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('click', handleClick);
+        window.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        window.addEventListener('wheel', handleWheel, { passive: false });
+        
+        animate();
+
+        // Cleanup
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          window.removeEventListener('click', handleClick);
+          window.removeEventListener('mousedown', handleMouseDown);
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+          window.removeEventListener('wheel', handleWheel);
+          
+          if (mountRef.current && rendererRef.current) {
+            mountRef.current.removeChild(rendererRef.current.domElement);
+          }
+          
+          // Dispose of Three.js resources
+          elements.forEach(element => {
+            const cubeData = elementCubesRef.current[element.number];
+            if (cubeData && cubeData.mesh) {
+              cubeData.mesh.geometry.dispose();
+              cubeData.mesh.material.dispose();
+            }
+          });
+        };
+      }, [viewingTable]);
+
+      return (
+        <div className="flex-col w-full h-screen">
+          {/* 3D Scene */}
+          <div ref={mountRef} className="flex-grow w-full" />
+          
+          {/* Element Info Panel */}
+          {showElementInfo && currentElement && (
+            <div className="absolute bottom-0 left-0 bg-slate-800 text-white p-4 m-4 rounded-lg max-w-lg shadow-lg">
+              <h2 className="text-2xl font-bold">{currentElement.number}. {currentElement.name} ({currentElement.symbol})</h2>
+              <p className="text-lg mb-2">Category: {currentElement.category}</p>
+              <p className="mb-2">{currentElement.description}</p>
+              <h3 className="text-xl font-semibold mb-1">Atomic Structure</h3>
+              <p>{currentElement.structure}</p>
+            </div>
+          )}
+          
+          {/* Interactions Panel */}
+          {showInteractions && (
+            <div className="absolute bottom-0 right-0 bg-slate-800 text-white p-4 m-4 rounded-lg max-w-lg shadow-lg">
+              <h2 className="text-2xl font-bold">Element Interactions</h2>
+              <p className="whitespace-pre-line">{interactions}</p>
+            </div>
+          )}
+          
+          {/* Back button (when viewing atom model) */}
+          {!viewingTable && (
+            <div 
+              className="absolute top-0 left-0 bg-slate-800 text-white p-4 m-4 rounded-lg shadow-lg cursor-pointer z-10"
+              onClick={() => switchView(null)}
+            >
+              ← Back to Periodic Table
+            </div>
+          )}
+          
+          {/* Atom model info */}
+          {showAtomModel && currentElement && (
+            <div className="absolute top-0 right-0 bg-slate-800 text-white p-4 m-4 rounded-lg max-w-lg shadow-lg z-10">
+              <h2 className="text-2xl font-bold">Atomic Structure: {currentElement.name}</h2>
+              <p className="mb-2">{currentElement.structure}</p>
+              <p>Drag to rotate the model. Scroll to zoom.</p>
+              <p className="mt-4 text-sm">Note: Visualization is simplified for educational purposes.</p>
+            </div>
+          )}
+          
+          {/* Instructions */}
+          {viewingTable && (
+            <div className="absolute top-0 left-0 text-white p-4 bg-black bg-opacity-50 rounded z-10">
+              <p>Click on elements to see atomic structure</p>
+              <p>Drag to rotate, scroll to zoom</p>
+            </div>
+          )}
+          
+          {/* Debug panel - uncomment for debugging */}
+          {/*
+          <div className="absolute top-24 left-0 bg-black bg-opacity-75 text-white p-4 m-4 rounded-lg shadow-lg z-10">
+            <p>viewingTable: {viewingTable ? 'true' : 'false'}</p>
+            <p>showAtomModel: {showAtomModel ? 'true' : 'false'}</p>
+            <p>Element: {currentElement?.name || 'none'}</p>
+          </div>
+          */}
+        </div>
+      );
+    };
+
+    // Render the component to the DOM
+    ReactDOM.render(<PeriodicTable />, document.getElementById('root'));
+  </script>
+</body>
+</html>

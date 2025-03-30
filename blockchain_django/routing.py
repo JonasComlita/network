@@ -1,7 +1,7 @@
-# blockchain_django/routing.py
 from django.urls import re_path
 from . import consumers
 
+# Define WebSocket URL patterns for blockchain app
 websocket_urlpatterns = [
     # Block-related WebSockets
     re_path(r'ws/blocks/$', consumers.BlockConsumer.as_asgi()),
@@ -13,13 +13,13 @@ websocket_urlpatterns = [
     
     # Wallet-related WebSockets
     re_path(r'ws/wallet/$', consumers.WalletConsumer.as_asgi()),
-    re_path(r'ws/wallets/$', consumers.WalletConsumer.as_asgi()),  # Added for multiple wallets support
+    re_path(r'ws/wallets/$', consumers.WalletConsumer.as_asgi()),
     
     # User profile WebSockets
     re_path(r'ws/user_profile/$', consumers.UserProfileConsumer.as_asgi()),
     
     # Authentication WebSockets
-    re_path(r'ws/auth_status/$', consumers.AuthStatusConsumer.as_asgi()),  # Added for auth status updates
+    re_path(r'ws/auth_status/$', consumers.AuthStatusConsumer.as_asgi()),
     
     # Analytics WebSockets
     re_path(r'ws/analytics/$', consumers.AdvancedAnalyticsConsumer.as_asgi()),
@@ -36,7 +36,7 @@ websocket_urlpatterns = [
     re_path(r'ws/user_preferences/$', consumers.UserPreferencesConsumer.as_asgi()),
     
     # 2FA WebSockets
-    re_path(r'ws/2fa_status/$', consumers.TwoFactorStatusConsumer.as_asgi()),  # Added for 2FA status updates
+    re_path(r'ws/2fa_status/$', consumers.TwoFactorStatusConsumer.as_asgi()),
     
     # Data WebSockets
     re_path(r'ws/price/$', consumers.PriceChangeConsumer.as_asgi()),
@@ -50,7 +50,7 @@ websocket_urlpatterns = [
     re_path(r'ws/notifications/$', consumers.NotificationConsumer.as_asgi()),
     
     # Multi-wallet WebSockets
-    re_path(r'ws/user_wallet/(?P<wallet_address>[^/]+)/$', consumers.UserWalletConsumer.as_asgi()),  # Added for specific wallet updates
+    re_path(r'ws/user_wallet/(?P<wallet_address>[^/]+)/$', consumers.UserWalletConsumer.as_asgi()),
     
     # Utility WebSockets
     re_path(r'ws/health-check/$', consumers.HealthCheckConsumer.as_asgi()),

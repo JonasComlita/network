@@ -44,6 +44,9 @@ INSTALLED_APPS = [
     'channels',
     'corsheaders',
     'rest_framework_simplejwt',
+    # Add our new apps
+    'forum',
+    'gaming',
 ]
 
 AUTH_USER_MODEL = 'blockchain_django.CustomUser'
@@ -187,6 +190,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Media files
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -218,6 +226,14 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Allow your React app
 ]
+
+# Gaming configuration
+GAMING_CONFIG = {
+    'game_files_dir': os.path.join(BASE_DIR, 'media', 'games'),
+    'max_earnings_per_session': 100.0,
+    'min_play_time_for_rewards': 60,  # seconds
+    'enable_blockchain_verification': True,
+}
 
 # Channels settings
 CHANNEL_LAYERS = {
@@ -261,6 +277,16 @@ LOGGING = {
             'propagate': True,
         },
         'channels': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'forum': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'gaming': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': True,

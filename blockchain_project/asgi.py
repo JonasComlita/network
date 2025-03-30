@@ -21,7 +21,7 @@ from channels.layers import get_channel_layer
 
 # Import the middleware after Django setup
 from blockchain_django.middleware import TokenAuthMiddlewareStack
-from blockchain_django.routing import websocket_urlpatterns
+from blockchain_project.routing import websocket_urlpatterns
 
 # Get ASGI application
 django_asgi_app = get_asgi_application()
