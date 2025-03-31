@@ -62,3 +62,19 @@ class BlockchainDjangoConfig(AppConfig):
             logger.error(f"Failed to initialize wallet service: {e}", exc_info=True)
 
         logger.info("Blockchain Django app initialization completed")
+
+class ForumConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'forum'
+
+    def ready(self):
+        """Import signals when app is ready"""
+        import forum.signals  # Only if you have signals
+
+class GamingConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'gaming'
+
+    def ready(self):
+        """Import signals when app is ready"""
+        import gaming.signals  # Only if you have signals

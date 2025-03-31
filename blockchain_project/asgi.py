@@ -9,6 +9,11 @@ https://docs.djangoproject.com/en/5.1/howto/deployment/asgi/
 
 import os
 import django
+import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
 
 # Set Django settings module and setup Django first
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "blockchain_project.settings")
@@ -21,7 +26,7 @@ from channels.layers import get_channel_layer
 
 # Import the middleware after Django setup
 from blockchain_django.middleware import TokenAuthMiddlewareStack
-from blockchain_project.routing import websocket_urlpatterns
+from blockchain_django.routing import websocket_urlpatterns
 
 # Get ASGI application
 django_asgi_app = get_asgi_application()

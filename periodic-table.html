@@ -1263,81 +1263,6 @@
       // If imported calculator isn't available, use our built-in logic as fallback
       console.log("Using built-in bond determination logic");
       
-      // Calculate electronegativity difference
-      const electronegativityValues = {
-        // Electronegativity values (Pauling scale)
-        1: 2.20, // H
-        2: 0.00, // He (noble gas, doesn't form bonds readily)
-        3: 0.98, // Li
-        4: 1.57, // Be
-        5: 2.04, // B
-        6: 2.55, // C
-        7: 3.04, // N
-        8: 3.44, // O
-        9: 3.98, // F
-        10: 0.00, // Ne (noble gas)
-        11: 0.93, // Na
-        12: 1.31, // Mg
-        13: 1.61, // Al
-        14: 1.90, // Si
-        15: 2.19, // P
-        16: 2.58, // S
-        17: 3.16, // Cl
-        18: 0.00, // Ar (noble gas)
-        19: 0.82, // K
-        20: 1.00, // Ca
-        21: 1.36, // Sc
-        22: 1.54, // Ti
-        23: 1.63, // V
-        24: 1.66, // Cr
-        25: 1.55, // Mn
-        26: 1.83, // Fe
-        27: 1.88, // Co
-        28: 1.91, // Ni
-        29: 1.90, // Cu
-        30: 1.65, // Zn
-        31: 1.81, // Ga
-        32: 2.01, // Ge
-        33: 2.18, // As
-        34: 2.55, // Se
-        35: 2.96, // Br
-        36: 0.00, // Kr (noble gas)
-        37: 0.82, // Rb
-        38: 0.95, // Sr
-        39: 1.22, // Y
-        40: 1.33, // Zr
-        41: 1.60, // Nb
-        42: 2.16, // Mo
-        44: 2.20, // Ru
-        45: 2.28, // Rh
-        46: 2.20, // Pd
-        47: 1.93, // Ag
-        48: 1.69, // Cd
-        49: 1.78, // In
-        50: 1.96, // Sn
-        51: 2.05, // Sb
-        52: 2.10, // Te
-        53: 2.66, // I
-        54: 0.00, // Xe (noble gas)
-        55: 0.79, // Cs
-        56: 0.89, // Ba
-        57: 1.10, // La
-        74: 2.36, // W 
-        76: 2.20, // Os
-        77: 2.20, // Ir
-        78: 2.28, // Pt
-        79: 2.54, // Au
-        80: 2.00, // Hg
-        81: 1.62, // Tl
-        82: 2.33, // Pb
-        83: 2.02, // Bi
-        88: 0.90, // Ra
-        89: 1.10, // Ac
-        90: 1.30, // Th
-        91: 1.50, // Pa
-        92: 1.38  // U
-      };
-      
       // If we don't have electronegativity data for either element, default to "Unknown bond type"
       if (!electronegativityValues[element1] || !electronegativityValues[element2]) {
         return {
@@ -1345,20 +1270,6 @@
           description: "Insufficient data to determine bond type",
           color: "#AAAAAA", // Gray
           strength: "Unknown"
-        };
-      }
-      
-      // Calculate the electronegativity difference
-      const diffEN = Math.abs(electronegativityValues[element1] - electronegativityValues[element2]);
-      
-      // Check if either element is a noble gas (they don't form strong bonds)
-      if (electronegativityValues[element1] === 0 || electronegativityValues[element2] === 0) {
-        return {
-          type: "Van der Waals forces",
-          description: "Weak attractions between molecules or atoms",
-          color: "#CCCCCC", // Light gray
-          strength: "Very weak (0.1-40 kJ/mol)",
-          additional: "Important in noble gases and nonpolar molecules"
         };
       }
       
